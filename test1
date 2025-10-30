@@ -27,8 +27,17 @@ local container = WaitForPath(game.Players.LocalPlayer:WaitForChild("PlayerGui")
 print("Игра загружена:", container)
 print("PlayerGui и Humanoid загружены!")
 
-local targetName = getgenv().name
 local player = game:GetService("Players").LocalPlayer
+
+repeat wait(1) 
+    print('waiting')
+    local args = {
+        [1] = "Phone";
+    }
+    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Extras"):WaitForChild("ChangeLastDevice"):FireServer(unpack(args))
+until not player.PlayerGui:FindFirstChild("DeviceSelect")
+
+local targetName = getgenv().name
 local function get_device_type()
     repeat wait(1) 
         print('waiting2')

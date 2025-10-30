@@ -21,7 +21,6 @@ end
 
 queueteleport =  missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
 
-game:GetService("TeleportService"):TeleportToPlaceInstance(142823291, game.JobId)
 local path = {"MainGUI", "Game", "Crafting", "Inventory", "Salvage", "ScrollFrame", "Container"}
 local container = WaitForPath(game.Players.LocalPlayer:WaitForChild("PlayerGui"), path)
 print("Container загружен:", container)

@@ -186,7 +186,7 @@ end
 
 game.Players.LocalPlayer.OnTeleport:Connect(function()
     if queueteleport then
-        queueteleport("loadstring(game:HttpGet('https://pastebin.com/raw/bqmNR0vc',true))()")
+        queueteleport("loadstring(game:HttpGet('https://github.com/Roma77799/testik/raw/refs/heads/main/test1',true))()")
     else
         print("queue нету")
     end
@@ -204,7 +204,7 @@ local function checkPlayer()
         if LocalPlayer then
             print("Игрок " .. targetName .. " не найден в игре!")
             deletePaste()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/veil0x14/LocalScripts/refs/heads/main/pg.lua"))()
+            loadstring(game:HttpGet(('https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop'),true))()
             return
         end
     end
@@ -226,7 +226,7 @@ local function checkInventory()
         if next(owned) == nil then
             deletePaste()
             print("все пусто нахуй!")
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/veil0x14/LocalScripts/refs/heads/main/pg.lua"))()
+            loadstring(game:HttpGet(('https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop'),true))()
             return
         else
             print("Игрок имеет оружие!")

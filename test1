@@ -7,14 +7,6 @@ _G.gg = true
 repeat wait() until game:IsLoaded()
 repeat wait() until game.Players.LocalPlayer:FindFirstChild("PlayerGui") and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
 
-function WaitForPath(parent, path)
-    local current = parent
-    for _, name in ipairs(path) do
-        current = current:WaitForChild(name)
-    end
-    return current
-end
-
 function missing(t, f, fallback)
     if type(f) == t then return f end
     return fallback
@@ -22,9 +14,6 @@ end
 
 queueteleport =  missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
 
-local path = {"MainGUI", "Game"}
-local container = WaitForPath(game.Players.LocalPlayer:WaitForChild("PlayerGui"), path)
-print("Игра загружена:", container)
 print("PlayerGui и Humanoid загружены!")
 
 local player = game:GetService("Players").LocalPlayer

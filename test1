@@ -1,5 +1,9 @@
-
-
+_G.gg = _G.gg or false
+if _G.gg then
+    print("already")
+    return
+end
+_G.gg = true
 --// Services
 local HttpService = game:GetService("HttpService")
 

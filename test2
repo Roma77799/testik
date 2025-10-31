@@ -19,11 +19,36 @@ print("PlayerGui и Humanoid загружены!")
 local player = game:GetService("Players").LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-repeat wait(2) 
-    print('waiting')
-    local selectt = playerGui.DeviceSelect.Container.Tablet.Button
-    getconnections(selectt.MouseButton1Click)[1]:Fire()
-until not player.PlayerGui:FindFirstChild("DeviceSelect")
+repeat
+    wait(2)
+    print("waiting")
+
+    -- Проверяем, существует ли GUI и кнопка
+    local playerGui = player:FindFirstChild("PlayerGui")
+    if not playerGui then break end
+
+    local deviceSelect = playerGui:FindFirstChild("DeviceSelect")
+    if not deviceSelect then break end
+
+    local container = deviceSelect:FindFirstChild("Container")
+    if not container then break end
+
+    local tablet = container:FindFirstChild("Tablet")
+    if not tablet then break end
+
+    local selectt = tablet:FindFirstChild("Button")
+    if not selectt then
+        print("selectt не найден, выходим из цикла")
+        break
+    end
+
+    -- Если нашли кнопку, кликаем
+    local connections = getconnections(selectt.MouseButton1Click)
+    if connections and connections[1] then
+        connections[1]:Fire()
+    end
+
+until not playerGui:FindFirstChild("DeviceSelect")
 
 local targetName = getgenv().name
 local function get_device_type()

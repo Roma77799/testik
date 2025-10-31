@@ -128,6 +128,7 @@ TeleportService.TeleportInitFailed:Connect(function(result)
         print("🧹 Критическая ошибка телепорта. Удаляем пасту...")
         deletePaste(getgenv().paste)
     else
+        print(result)
         print("ℹ️ Паста не будет удалена, так как ошибка не критическая.")
     end
 end)

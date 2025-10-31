@@ -113,7 +113,7 @@ local deleteOnError = {
 -- Чтобы не вызывать deletePaste несколько раз
 local teleportFailedHandled = false
 
-TeleportService.TeleportInitFailed:Connect(function(result)
+TeleportService.TeleportInitFailed:Connect(function(player, result)
     local message = teleportMessages[result] or ("⚠️ Неизвестный результат телепортации: " .. tostring(result))
     warn(message)
 
@@ -122,7 +122,6 @@ TeleportService.TeleportInitFailed:Connect(function(result)
         return
     end
 
-    -- Если ошибка из списка критических — удаляем пасту
     if deleteOnError[result] then
         teleportFailedHandled = true
         print("🧹 Критическая ошибка телепорта. Удаляем пасту...")
@@ -132,6 +131,7 @@ TeleportService.TeleportInitFailed:Connect(function(result)
         print("ℹ️ Паста не будет удалена, так как ошибка не критическая.")
     end
 end)
+
 
 --// Получение самой старой пасты
 local function getOldestPaste()

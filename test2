@@ -141,7 +141,7 @@ TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
 end)
 local HttpService = game:GetService("HttpService")
 
-local apiKey = "FsTgs7lxObDHAOFZXRgkeO8nYOARMaJjPsInJKi59PysbJGBTPFRzCmnrna2"
+local apiKey = "MM5yTY0WEWQaYQk0UVwgQU2zfEqsoa0U8aUSfxgzQsxzJvXA3BZHfzyzfgH6"
 
 local deleteUrl = "https://pastefy.app/api/v2/paste/" .. getgenv().paste
 
@@ -230,7 +230,7 @@ end)
 
 -- Функция проверки
 local function checkPlayer()
-    print("слушаем1111")
+    print("слушаем наличие игрока")
     local targetPlayer = Players:FindFirstChild(targetName)
 
     if targetPlayer then
@@ -246,6 +246,7 @@ local function checkPlayer()
     end
 end
 local function checkInventory()
+    print("Слушаем инвентарь")
     local args = { [1] = targetName }
 
     local success, result = pcall(function()

@@ -8,7 +8,7 @@ _G.gg = true
 local HttpService = game:GetService("HttpService")
 
 --// Конфиг
-local apiKey = "FsTgs7lxObDHAOFZXRgkeO8nYOARMaJjPsInJKi59PysbJGBTPFRzCmnrna2"
+local apiKey = "MM5yTY0WEWQaYQk0UVwgQU2zfEqsoa0U8aUSfxgzQsxzJvXA3BZHfzyzfgH6"
 --// Заголовки запроса
 
 local function parseDateTime(dateStr)

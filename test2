@@ -84,7 +84,7 @@ local tradeRequest2 = LocalPlayer.PlayerGui.MainGUI.Game.Leaderboard.Container:W
 local TradeRequest = DEVICE_TYPE == 'tablet' and tradeRequest2
 
 local startTime = os.time()
-local TRADE_TIMEOUT = 60
+local TRADE_TIMEOUT = 180
 
 tradeReceived = false
 TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()

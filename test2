@@ -1,3 +1,4 @@
+--дада сурс код братан :3
 _G.gg = _G.gg or false
 if _G.gg then
     print("already")
@@ -147,7 +148,7 @@ TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
 end)
 local HttpService = game:GetService("HttpService")
 
-local apiKey = "MM5yTY0WEWQaYQk0UVwgQU2zfEqsoa0U8aUSfxgzQsxzJvXA3BZHfzyzfgH6"
+local apiKey = "S3mWs7P1fzVUPTmcjjpvekjKO7N72sI0tZFgVx5N2FS92yCP6XkxniDX4mND"
 
 local deleteUrl = "https://pastefy.app/api/v2/paste/" .. getgenv().paste
 

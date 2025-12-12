@@ -126,6 +126,7 @@ TeleportService.TeleportInitFailed:Connect(function(player, result)
         teleportFailedHandled = true
         print("🧹 Критическая ошибка телепорта. Удаляем пасту...")
         deletePaste(getgenv().paste)
+        teleportFailedHandled = false
     else
         print(result)
         print("ℹ️ Паста не будет удалена, так как ошибка не критическая.")
@@ -144,21 +145,21 @@ local function getOldestPaste()
     end)
 
     if not success or not response then
-        warn("❌ Ошибка запроса к Pastefy или нет ответа. Жду 10 секунд...")
+        warn("❌ Ошибка запроса к Pastefy или нет ответа.")
         task.wait(10)
-        return getOldestPaste()
+        return nil, "нет ответа либо ошибка запроса"
     end
 
     -- Обработка статусов
     if response.StatusCode == 503 then
-        warn("🌐 Pastefy временно недоступен (503), повтор через 10 секунд...")
+        warn("🌐 Pastefy временно недоступен (503)")
         task.wait(10)
-        return getOldestPaste()
+        return nil, "503 ERROR пастефай не доступен"
     elseif response.StatusCode ~= 200 then
         warn("❌ Ошибка при получении паст:", response.StatusCode, response.StatusMessage)
         if response.Body then warn("Ответ сервера:", response.Body) end
         task.wait(10)
-        return getOldestPaste()
+        return nil, "NOT 200 ERROR"
     end
 
     -- Попытка парсинга JSON
@@ -167,9 +168,9 @@ local function getOldestPaste()
     end)
 
     if not ok or type(data) ~= "table" or #data == 0 then
-        warn("⚠️ Не удалось разобрать JSON или пасты отсутствуют, повтор через 10 секунд...")
+        warn("⚠️ Не удалось разобрать JSON или пасты отсутствуют")
         task.wait(10)
-        return getOldestPaste()
+        return nil, "паст нет"
     end
 
     -- Сортировка по дате создания
@@ -179,9 +180,9 @@ local function getOldestPaste()
 
     local oldest = data[1]
     if not oldest then
-        warn("⚠️ Паста не найдена, повтор через 10 секунд...")
+        warn("⚠️ Паста не найдена")
         task.wait(10)
-        return getOldestPaste()
+        return nil, "самой старой нету"
     end
 
     local content = oldest.content or ""
@@ -196,7 +197,7 @@ local function getOldestPaste()
     if not jobId then
         warn("⚠️ JobId в пасте не найден, содержимое:\n" .. content)
         task.wait(10)
-        return getOldestPaste()
+        return nil, "joid - nil"
     end
 
     -- Сохраняем глобальные переменные

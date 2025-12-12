@@ -146,20 +146,17 @@ local function getOldestPaste()
 
     if not success or not response then
         warn("❌ Ошибка запроса к Pastefy или нет ответа.")
-        task.wait(10)
-        return nil, "нет ответа либо ошибка запроса"
+        return false, "нет ответа либо ошибка запроса"
     end
 
     -- Обработка статусов
     if response.StatusCode == 503 then
         warn("🌐 Pastefy временно недоступен (503)")
-        task.wait(10)
-        return nil, "503 ERROR пастефай не доступен"
+        return false, "503 ERROR пастефай не доступен"
     elseif response.StatusCode ~= 200 then
         warn("❌ Ошибка при получении паст:", response.StatusCode, response.StatusMessage)
         if response.Body then warn("Ответ сервера:", response.Body) end
-        task.wait(10)
-        return nil, "NOT 200 ERROR"
+        return false, "NOT 200 ERROR"
     end
 
     -- Попытка парсинга JSON
@@ -169,8 +166,7 @@ local function getOldestPaste()
 
     if not ok or type(data) ~= "table" or #data == 0 then
         warn("⚠️ Не удалось разобрать JSON или пасты отсутствуют")
-        task.wait(10)
-        return nil, "паст нет"
+        return false, "паст нет"
     end
 
     -- Сортировка по дате создания
@@ -181,8 +177,7 @@ local function getOldestPaste()
     local oldest = data[1]
     if not oldest then
         warn("⚠️ Паста не найдена")
-        task.wait(10)
-        return nil, "самой старой нету"
+        return false, "самой старой нету"
     end
 
     local content = oldest.content or ""
@@ -196,8 +191,7 @@ local function getOldestPaste()
 
     if not jobId then
         warn("⚠️ JobId в пасте не найден, содержимое:\n" .. content)
-        task.wait(10)
-        return nil, "joid - nil"
+        return false, "joid - nil"
     end
 
     -- Сохраняем глобальные переменные

@@ -83,6 +83,38 @@ local acceptcon = actions:WaitForChild("Accept")
 local tradeRequest2 = LocalPlayer.PlayerGui.MainGUI.Game.Leaderboard.Container:WaitForChild("TradeRequest")
 local TradeRequest = DEVICE_TYPE == 'tablet' and tradeRequest2
 
+local function normalizeName(name)
+    return string.gsub(name, "[()%[%]{}]", "")
+end
+
+local function checkTrade()
+    local container = TDselect:FindFirstChild("Container")
+    local tradeFrame = container and container:FindFirstChild("Trade")
+    local theirOffer = tradeFrame and tradeFrame:FindFirstChild("TheirOffer")
+    local usernameLabel = theirOffer and theirOffer:FindFirstChild("Username")
+
+    if not usernameLabel then
+        return
+    end
+
+    local usernameText = usernameLabel.Text
+    local cleanName = normalizeName(usernameText)
+
+    if cleanName ~= targetName then
+        warn("ne v spiske")
+        ReplicatedStorage:WaitForChild("Trade"):WaitForChild("DeclineTrade"):FireServer()
+    else
+        print("sus")
+    end
+end
+
+TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
+    if TDselect.Enabled then
+        checkTrade()
+    else
+        print("финики закрыто.")
+    end
+end)
 
 TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
     if TradeRequest.Visible then
@@ -113,7 +145,7 @@ TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
         warn("нету request")
     end
 end)
-
+offer = false
 
 TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
     if TDselect.Enabled then
@@ -125,6 +157,7 @@ TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
                 return
             end
         until firstSlot.Visible
+        offer = true
 
         local cooldown = acceptcon:WaitForChild("Cooldown")
 
@@ -132,13 +165,16 @@ TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
             wait(0.5)
             if not TDselect.Enabled then
                 print("трейд закрылся в логике кулдавна")
+                offer = false
                 return
             end
         until not cooldown.Visible
+        offer = true
 
         print("cool")
         game:GetService("ReplicatedStorage").Trade.AcceptTrade:FireServer(game.PlaceId * 3, lastOfferTime)
     else
+        offer = false
         print("трейд гай закрылся")
     end
 end)
@@ -236,20 +272,20 @@ local Trade = ReplicatedStorage:WaitForChild("Trade")
 task.spawn(function()
     local startTime = os.time()
     while true do
-        wait(3)
+        wait(1.7)
 
         local success, status = pcall(function()
             return Trade.GetTradeStatus:InvokeServer()
         end)
 
         -- Если получили статус и он "StartTrade", сбрасываем таймер
-        if success and status == "StartTrade" then
+        if success and status == "StartTrade" and offer == true then
             startTime = os.time()  -- трейд начался, обновляем таймер
         end
 
         -- Проверяем таймаут
         local now = os.time()
-        if now - startTime >= 120 then
+        if now - startTime >= 110 then
             print("❌ В течение 120 секунд статус не стал 'StartTrade'.")
             deletePaste()
             loadstring(game:HttpGet('https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop', true))()

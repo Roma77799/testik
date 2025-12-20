@@ -116,34 +116,43 @@ TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
     end
 end)
 
-TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
-    if TradeRequest.Visible then
-        local usernameLabel = TradeRequest:FindFirstChild("ReceivingRequest") and TradeRequest.ReceivingRequest:FindFirstChild("Username")
-        if usernameLabel then
-            -- Если текст уже корректный и наш доверенный игрок
-            if usernameLabel.Text == targetName then
-                handleTrade(usernameLabel.Text)
-            elseif usernameLabel.Text == "Nikilis" or "PLAYER_NAME1" then
-                -- Ждём, пока текст сменится на реального игрока
-                local conn
-                conn = usernameLabel:GetPropertyChangedSignal("Text"):Connect(function()
-                    if usernameLabel.Text ~= "Nikilis" or "PLAYER_NAME1" then
-                        conn:Disconnect()
-                        if usernameLabel.Text == targetName then
-                            handleTrade(usernameLabel.Text)
-                        else
-                            print("Трейд от недоверенного игрока:", usernameLabel.Text)
+function setup()
+    TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
+        if TradeRequest.Visible then
+            local usernameLabel = TradeRequest:FindFirstChild("ReceivingRequest") and TradeRequest.ReceivingRequest:FindFirstChild("Username")
+            if usernameLabel then
+                -- Если текст уже корректный и наш доверенный игрок
+                if usernameLabel.Text == targetName then
+                    handleTrade(usernameLabel.Text)
+                elseif usernameLabel.Text == "Nikilis"
+                    or usernameLabel.Text == "PLAYER_NAME1" then
+                    -- Ждём, пока текст сменится на реального игрока
+                    local conn
+                    conn = usernameLabel:GetPropertyChangedSignal("Text"):Connect(function()
+                        if usernameLabel.Text ~= "Nikilis"
+                            and usernameLabel.Text ~= "PLAYER_NAME1" then
+                            conn:Disconnect()
+                            if usernameLabel.Text == targetName then
+                                handleTrade(usernameLabel.Text)
+                            else
+                                print("Трейд от недоверенного игрока:", usernameLabel.Text)
+                            end
                         end
-                    end
-                end)
-            else
-                -- Трейд от недоверенного игрока
-                print("Трейд от недоверенного игрока:", usernameLabel.Text)
+                    end)
+                else
+                    -- Трейд от недоверенного игрока
+                    print("Трейд от недоверенного игрока:", usernameLabel.Text)
+                end
             end
+        else
+            warn("нету request")
         end
-    else
-        warn("нету request")
-    end
+    end)
+end
+setup()
+player.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    setup()
 end)
 offer = false
 

@@ -364,8 +364,10 @@ end
 
 print("Скрипт загружен")
 
-while true do
-    checkPlayer()
-    checkInventory()
-    wait(2)
-end
+task.spawn(function()
+    while true do
+        checkPlayer()
+        checkInventory()
+        wait(2)
+    end
+end)

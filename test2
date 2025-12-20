@@ -79,10 +79,6 @@ local container = TDselect:WaitForChild("Container")
 local actions = container:WaitForChild("Trade"):WaitForChild("Actions")
 local acceptcon = actions:WaitForChild("Accept")
 
--- Получаем TradeRequest GUI
-local tradeRequest2 = LocalPlayer.PlayerGui.MainGUI.Game.Leaderboard.Container:WaitForChild("TradeRequest")
-local TradeRequest = DEVICE_TYPE == 'tablet' and tradeRequest2
-
 local function normalizeName(name)
     return string.gsub(name, "[()%[%]{}]", "")
 end
@@ -116,44 +112,73 @@ TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
     end
 end)
 
-function setup()
-    TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
-        if TradeRequest.Visible then
-            local usernameLabel = TradeRequest:FindFirstChild("ReceivingRequest") and TradeRequest.ReceivingRequest:FindFirstChild("Username")
-            if usernameLabel then
-                -- Если текст уже корректный и наш доверенный игрок
-                if usernameLabel.Text == targetName then
-                    handleTrade(usernameLabel.Text)
-                elseif usernameLabel.Text == "Nikilis"
-                    or usernameLabel.Text == "PLAYER_NAME1" then
-                    -- Ждём, пока текст сменится на реального игрока
-                    local conn
-                    conn = usernameLabel:GetPropertyChangedSignal("Text"):Connect(function()
-                        if usernameLabel.Text ~= "Nikilis"
-                            and usernameLabel.Text ~= "PLAYER_NAME1" then
-                            conn:Disconnect()
-                            if usernameLabel.Text == targetName then
-                                handleTrade(usernameLabel.Text)
-                            else
-                                print("Трейд от недоверенного игрока:", usernameLabel.Text)
-                            end
-                        end
-                    end)
-                else
-                    -- Трейд от недоверенного игрока
-                    print("Трейд от недоверенного игрока:", usernameLabel.Text)
-                end
-            end
-        else
-            warn("нету request")
-        end
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local PLACEHOLDERS = {
+    Nikilis = true,
+    PLAYER_NAME1 = true,
+}
+
+-- Получаем TradeRequest каждый раз ЗАНОВО
+local function getTradeRequest()
+    if DEVICE_TYPE ~= "tablet" then
+        return nil
+    end
+
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+    local ok, tradeRequest = pcall(function()
+        return playerGui.MainGUI.Game.Leaderboard.Container:WaitForChild("TradeRequest", 50)
     end)
+
+    if ok then
+        return tradeRequest
+    end
+
+    return nil
 end
-setup()
-player.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    setup()
-end)
+
+local function waitForValidUsername(usernameLabel)
+    while usernameLabel.Parent and PLACEHOLDERS[usernameLabel.Text] do
+        usernameLabel:GetPropertyChangedSignal("Text"):Wait()
+    end
+    return usernameLabel.Text
+end
+
+local function tradeLoop()
+    local TradeRequest = getTradeRequest()
+    if not TradeRequest then return end
+
+    while TradeRequest.Parent do
+        -- ждём открытия трейда
+        if not TradeRequest.Visible then
+            TradeRequest:GetPropertyChangedSignal("Visible"):Wait()
+        end
+
+        local receiving = TradeRequest:FindFirstChild("ReceivingRequest")
+        local usernameLabel = receiving and receiving:FindFirstChild("Username")
+
+        if not usernameLabel then
+            task.wait()
+            continue
+        end
+
+        local username = waitForValidUsername(usernameLabel)
+
+        if username == targetName then
+            handleTrade(username)
+        else
+            print("Трейд от недоверенного игрока:", username)
+        end
+
+        -- ждём закрытия трейда, чтобы не зациклиться
+        TradeRequest:GetPropertyChangedSignal("Visible"):Wait()
+    end
+end
+
+task.spawn(tradeLoop)
+
 offer = false
 
 TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
@@ -371,3 +396,4 @@ task.spawn(function()
         wait(2)
     end
 end)
+

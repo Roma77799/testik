@@ -182,65 +182,57 @@ TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
 end)
 local HttpService = game:GetService("HttpService")
 
-local apiKey = "S3mWs7P1fzVUPTmcjjpvekjKO7N72sI0tZFgVx5N2FS92yCP6XkxniDX4mND"
+apiKey = "S3mWs7P1fzVUPTmcjjpvekjKO7N72sI0tZFgVx5N2FS92yCP6XkxniDX4mND"
 
-local deleteUrl = "https://pastefy.app/api/v2/paste/" .. getgenv().paste
+deleteUrl = "https://pastefy.app/api/v2/paste/" .. getgenv().paste
 
-local headers = {
-    Accept = "application/json",
-    ["Content-Type"] = "application/json",
-    ["Authorization"] = "Bearer " .. apiKey,
-}
+function deletePaste()
+    while true do
+        local response = request({
+            Url = deleteUrl,
+            Method = "DELETE",
+            Headers = {
+                Accept = "application/json",
+                ["Authorization"] = "Bearer " .. apiKey,
+            },
+        })
 
-local function deletePaste()
-    local req = {
-        Url = deleteUrl,
-        Method = "DELETE",
-        Headers = headers,
-    }
-
-    local response = request(req)
-
-    -- базовая проверка на наличие ответа
-    if not response then 
-        return false, "No response from request()"
-    end
-
-    -- логируем статус для дебага
-    print(("HTTP %s %s"):format(response.StatusCode or "?", response.StatusMessage or ""))
-
-    -- парсим тело ответа
-    local parsed = nil
-    if response.Body and response.Body ~= "" then
-        local ok, res = pcall(function() 
-            return HttpService:JSONDecode(response.Body)
-        end)
-        if ok then
-            parsed = res
-        else
-            return false, ("Invalid JSON in response body: %s"):format(tostring(response.Body))
+        if not response then
+            warn("[Pastefy] No response, retrying...")
+            task.wait(1)
+            continue
         end
-    end
 
-    -- проверяем успех удаления
-    if parsed and parsed.success then
-        print("Paste успешно удалена!")
-        return true, parsed
-    end
+        -- УСПЕХ: 204 или 200
+        if response.StatusCode == 204 or response.StatusCode == 200 then
+            warn("Прошлая паста успешно удалена")
+            return
+        end
 
-    -- иногда код 200/204 без parsed — считаем успехом
-    if response.StatusCode == 200 or response.StatusCode == 204 then
-        return true, parsed
-    end
+        local parsed
+        if response.Body and response.Body ~= "" then
+            local ok, res = pcall(HttpService.JSONDecode, HttpService, response.Body)
+            if ok then parsed = res end
+        end
 
-    -- неуспешный ответ
-    local err = {
-        status = response.StatusCode,
-        statusMessage = response.StatusMessage,
-        body = response.Body,
-        successFlag = parsed and parsed.success or nil
-    }
-    return false, err
+        if parsed and (
+            parsed.exception == "RateLimitException"
+            or parsed.exception == "TimeoutException"
+        ) then
+            warn("API limit / timeout, waiting 6s...")
+            task.wait(6)
+            continue
+        end
+
+        -- 404 = пасты больше нет → СЧИТАЕМ УСПЕХОМ
+        if response.StatusCode == 404 then
+            warn("Paste already deleted (404)")
+            return
+        end
+
+        warn("Server error:", response.StatusCode)
+        task.wait(6)
+    end
 end
 
 --[[Функция для обработки трейда
@@ -368,4 +360,3 @@ task.spawn(function()
         wait(2)
     end
 end)
-    

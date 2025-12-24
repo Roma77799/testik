@@ -151,7 +151,7 @@ local function getOldestPaste()
 
     -- Обработка статусов
     if response.StatusCode == 503 or 504 then
-        warn("🌐 Pastefy временно недоступен (503)")
+        warn("🌐 Pastefy временно недоступен" .. response.StatusCode)
         return false, "503 ERROR пастефай не доступен"
     elseif response.StatusCode ~= 200 then
         warn("❌ Ошибка при получении паст:", response.StatusCode, response.StatusMessage)

@@ -4,8 +4,8 @@ if _G.gg then
     return
 end
 _G.gg = true
-repeat wait() until game:IsLoaded()
-repeat wait() until game.Players.LocalPlayer:FindFirstChild("PlayerGui") and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+repeat wait(2) print("wait for loaded game") until game:IsLoaded()
+repeat wait(2) print("wait for pg") until game.Players.LocalPlayer:FindFirstChild("PlayerGui") and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
 
 function missing(t, f, fallback)
     if type(f) == t then return f end

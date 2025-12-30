@@ -293,7 +293,7 @@ local function checkInventory()
 end
 
 print("Скрипт загружен")
-
+foundPlayer = nil
 task.spawn(function()
     while true do
         checkPlayer()
@@ -303,8 +303,14 @@ task.spawn(function()
                 Trade.AcceptRequest:FireServer()
             end
         else
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player.Name == targetName then
+                    foundPlayer = player
+                    break
+                end
+            end
             if Trade:FindFirstChild("SendRequest") then
-                Trade.SendRequest:InvokeServer(targetName)
+                Trade.SendRequest:InvokeServer(foundPlayer)
             end
         end
         wait(2)

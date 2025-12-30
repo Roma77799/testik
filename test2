@@ -285,52 +285,287 @@ local function checkPlayer()
         end
     end
 end
-local function checkInventory()
-    print("Слушаем инвентарь")
-    local args = { [1] = targetName }
 
+goodItems = {
+    "Sorry",
+    "Scythe",
+    "Celestial",
+    "ElderwoodScythe",
+    "Gingerscope",
+    "Hallowscythe",
+    "Harvester",
+    "Icebreaker",
+    "Icepiercer",
+    "Icewing",
+    "Logchopper",
+    "NikKnife",
+    "SwirlyAxe",
+    "TravelerAxe",
+    "VampireAxe",
+    "UFOKnifeChroma",
+    "UFOKnife",
+    "Amerilaser",
+    "AuroraKnife",
+    "ZombieBat",
+    "BattleAxe",
+    "BattleAxe2",
+    "Bauble",
+    "BaubleChroma",
+    "Bioblade",
+    "Blaster",
+    "BlizzardChroma",
+    "Blizzard",
+    "Bloom",
+    "Blossom_G",
+    "BlueSeer",
+    "BonebladeChroma",
+    "Boneblade",
+    "AuroraGun",
+    "CandleflameChroma",
+    "Candleflame",
+    "Candy",
+    "Chill",
+    "Clockwork",
+    "Constellation",
+    "ConstellationChroma",
+    "Cookieblade",
+    "Gingermint_K",
+    "Gingermint_KChroma",
+    "ChromaDarkbringer",
+    "Darkbringer",
+    "Darkshot",
+    "Darksword",
+    "DeathshardChroma",
+    "Deathshard",
+    "Eggblade",
+    "ElderwoodKnifeChroma",
+    "ElderwoodKnife",
+    "ElderwoodGun",
+    "Eternal",
+    "Eternal2",
+    "Eternal3",
+    "Eternal4",
+    "EternalCane",
+    "TreeKnife2023Chroma",
+    "TreeKnife2023",
+    "TreeGun2023Chroma",
+    "TreeGun2023",
+    "FangChroma",
+    "Fang",
+    "Flames",
+    "Flora",
+    "FlowerwoodKnife",
+    "FlowerwoodGun",
+    "Frostbite",
+    "Frostsaber",
+    "Gemstone",
+    "GemstoneChroma",
+    "Ghostblade",
+    "GingerLuger",
+    "GingerbladeChroma",
+    "Gingerblade",
+    "Gingermint_G",
+    "GreenLuger",
+    "HallowsBlade",
+    "Hallow",
+    "Hallowgun",
+    "Handsaw",
+    "Heartblade",
+    "Heat",
+    "HeatChroma",
+    "IceDragon",
+    "IceShard",
+    "Icebeam",
+    "Iceblaster",
+    "Iceflake",
+    "Jinglegun",
+    "Laser",
+    "LaserChroma",
+    "ChromaLightbringer",
+    "Lightbringer",
+    "LugerChroma",
+    "Luger",
+    "Lugercane",
+    "Makeshift",
+    "Minty",
+    "Nebula",
+    "Nightblade",
+    "Ocean_G",
+    "AmericaSword",
+    "OrangeSeer",
+    "BaubleKnife",
+    "BaubleKnifeChroma",
+    "Pearl_K",
+    "Pearl_G",
+    "Peppermint",
+    "Phantom2022",
+    "Pixel",
+    "Plasmabeam",
+    "Plasmablade",
+    "Prismatic",
+    "Pumpking",
+    "PurpleSeer",
+    "Rainbow_K",
+    "Rainbow_G",
+    "RaygunChroma",
+    "Raygun",
+    "RedLuger",
+    "RedSeer",
+    "Sakura_K",
+    "SawChroma",
+    "Saw",
+    "TheSeer",
+    "SeerChroma",
+    "Shark",
+    "SharkChroma",
+    "Slasher",
+    "SlasherChroma",
+    "SnowDaggerChroma",
+    "SnowDagger",
+    "Snowcannon",
+    "SnowcannonChroma",
+    "Snowflake",
+    "Snowstorm",
+    "SnowstormChroma",
+    "WraithGun",
+    "Spectre2022",
+    "Spider",
+    "WraithKnife",
+    "Sugar",
+    "SunsetGun",
+    "SunsetGunChroma",
+    "SunsetKnifeChroma",
+    "SunsetKnife",
+    "SwirlyBlade",
+    "SwirlyGunChroma",
+    "SwirlyGun",
+    "TidesChroma",
+    "Tides",
+    "TravelerGunChroma",
+    "TravelerGun",
+    "Turkey2023",
+    "VampiresEdge",
+    "VampireGunChroma",
+    "VampireGun",
+    "Virtual",
+    "WatergunChroma",
+    "Watergun",
+    "Waves_K",
+    "WintersEdge",
+    "XenoKnife",
+    "XenoGun",
+    "Xmas",
+    "YellowSeer",
+    "Aquarium_G_2025",
+    "Aquarium_K_2025",
+    "Arctic_G_2022",
+    "Arctic_K_2022",
+    "Aurora_K_2021",
+    "Aurora_G_2021",
+    "Beach_K_2023",
+    "EliteBlue",
+    "Broken_K_2023",
+    "Bunnies_K_2025",
+    "Cavern_G_2019",
+    "Cavern_K_2019",
+    "Chromatic_K_2023",
+    "Chromatic_G_2023",
+    "CottonCandy",
+    "Cursed_G_2024",
+    "Cursed_K_2024",
+    "Elite",
+    "Emerald",
+    "Energized_G_2025",
+    "Energized_K_2025",
+    "Fade",
+    "Frostfade_K_2023",
+    "Frostfade_G_2023",
+    "Frozen_K_2025",
+    "Frozen_G_2025",
+    "Fusion",
+    "GhostK2018",
+    "GhostG2018",
+    "Ginger_G_2018",
+    "Ginger_K_2018",
+    "EliteGreen",
+    "GreenFire",
+    "Icecracker_K_2020",
+    "Icedriller_G_2020",
+    "JD",
+    "Latte_K_2023",
+    "Latte_G_2023",
+    "Midnight",
+    "Constellation_G_2024",
+    "Constellation_K_2024",
+    "Overseer",
+    "OverseerKnife",
+    "Palms_G_2024",
+    "Palms_K_2024",
+    "Plasmite",
+    "Predator",
+    "PredatorKnife",
+    "RedFire",
+    "Ripper_G_2020",
+    "Ripper_K_2020",
+    "Rune",
+    "Bleed",
+    "SantasMagic",
+    "SantasSpirit",
+    "ScratchBlue",
+    "Scratch",
+    "MLG",
+    "Skulls",
+    "Sparkle",
+    "Spectral_G_2021",
+    "Spectral_K_2021",
+    "Splash_G",
+    "Splash",
+    "Traveler_K_2023",
+    "Traveler_G_2023",
+    "Tree",
+    "TreeGun",
+    "Universe",
+    "Vampire_K_2022",
+    "Vampire_G_2022",
+    "Viper",
+    "Web",
+    "Witched",
+    "Cane_K_2018",
+}
+
+
+local function checkInventory()
     local success, result = pcall(function()
-        return ReplicatedStorage:WaitForChild("Remotes")
-            :WaitForChild("Extras")
-            :WaitForChild("GetFullInventory")
-            :InvokeServer(unpack(args))
+        return ReplicatedStorage.Remotes.Extras.GetFullInventory:InvokeServer(targetName)
     end)
 
     if not success or not result then
-        warn("Не удалось получить инвентарь:", result)
+        warn("Не удалось получить инвентарь")
         return
     end
 
-    local weapons = result.Weapons or {}
-    local owned = weapons.Owned or {}
+    local owned = result.Weapons and result.Weapons.Owned or {}
 
-    -- Проверяем, пустой ли инвентарь (нет оружия ИЛИ остались только дефолтные)
-    local isOnlyDefault = true
-    local hasAnyWeapon = next(owned) ~= nil
+    local hasGoodItem = false
 
-    if hasAnyWeapon then
-        for weaponName in pairs(owned) do
-            if weaponName ~= "DefaultKnife" and weaponName ~= "DefaultGun" then
-                isOnlyDefault = false
-                break
-            end
+    for _, goodName in ipairs(goodItems) do
+        if owned[goodName] then
+            hasGoodItem = true
+            break
         end
     end
 
-    if not hasAnyWeapon or isOnlyDefault then
+    if not hasGoodItem then
         deletePaste()
-        print("все пусто! (только дефолт остался)")
-        if getgenv().stop then
-            print("already hop")
-            return
+        if not getgenv().stop then
+            getgenv().stop = true
+            TeleportService:Teleport(18845424641)
         end
-        getgenv().stop = true
-        TeleportService:Teleport(18845424641)
-        return
     else
-        print("Игрок имеет оружие!")
+        print("Найден ценный предмет")
     end
 end
+
 
 print("Скрипт загружен")
 foundPlayer = nil

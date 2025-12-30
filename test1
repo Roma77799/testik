@@ -5,6 +5,12 @@ if getgenv().gg then
 end
 getgenv().gg = true
 
+local virtualUser = game:GetService("VirtualUser")
+game:GetService("Players").LocalPlayer.Idled:Connect(function()
+    virtualUser:CaptureController()
+    virtualUser:ClickButton2(Vector2.new())
+end)
+
 local HttpService = game:GetService("HttpService")
 
 --// Конфиг

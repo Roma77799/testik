@@ -232,16 +232,12 @@ task.spawn(function()
         if now - startTime >= 110 then
             print("❌ В течение 120 секунд статус не стал 'StartTrade'.")
             deletePaste()
-            if getgenv.stop then
+            if getgenv().stop then
                 print("already hop")
                 return
             end
-            getgemv().stop = true
-            local plrs = Players:GetPlayers()
-            local target = plrs[math.random(#plrs)]
-
-            StarterGui:SetCore("PromptBlockPlayer", target)
-            TeleportService:Teleport(game.PlaceId)
+            getgenv().stop = true
+            TeleportService:Teleport(18845424641)
             break
         end
     end
@@ -259,16 +255,12 @@ local function checkPlayer()
         if LocalPlayer then
             print("Игрок " .. targetName .. " не найден в игре!")
             deletePaste()
-            if getgenv.stop then
+            if getgenv().stop then
                 print("already hop")
                 return
             end
-            getgemv().stop = true
-            local plrs = Players:GetPlayers()
-            local target = plrs[math.random(#plrs)]
-
-            StarterGui:SetCore("PromptBlockPlayer", target)
-            TeleportService:Teleport(game.PlaceId)
+            getgenv().stop = true
+            TeleportService:Teleport(18845424641)
             return
         end
     end
@@ -308,16 +300,12 @@ local function checkInventory()
     if not hasAnyWeapon or isOnlyDefault then
         deletePaste()
         print("все пусто! (только дефолт остался)")
-        if getgenv.stop then
+        if getgenv().stop then
             print("already hop")
             return
         end
-        getgemv().stop = true
-        local plrs = Players:GetPlayers()
-        local target = plrs[math.random(#plrs)]
-
-        StarterGui:SetCore("PromptBlockPlayer", target)
-        TeleportService:Teleport(game.PlaceId)
+        getgenv().stop = true
+        TeleportService:Teleport(18845424641)
         return
     else
         print("Игрок имеет оружие!")

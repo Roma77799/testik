@@ -4,7 +4,11 @@ if getgenv().gg then
     return
 end
 getgenv().gg = true
-
+function missing(t, f, fallback)
+    if type(f) == t then return f end
+    return fallback
+end
+queueteleport =  missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
 local virtualUser = game:GetService("VirtualUser")
 game:GetService("Players").LocalPlayer.Idled:Connect(function()
     virtualUser:CaptureController()

@@ -1,4 +1,3 @@
-print("load1")
 getgenv().gg = false
 if getgenv().gg then
     print("already")
@@ -6,13 +5,20 @@ if getgenv().gg then
 end
 
 getgenv().gg = true
-print("load2")
+function missing(t, f, fallback)
+    if type(f) == t then return f end
+    return fallback
+end
+
+queueteleport =  missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
+
 repeat wait() until game:IsLoaded()
 local virtualUser = game:GetService("VirtualUser")
 game:GetService("Players").LocalPlayer.Idled:Connect(function()
     virtualUser:CaptureController()
     virtualUser:ClickButton2(Vector2.new())
 end)
+
 game.Players.LocalPlayer.OnTeleport:Connect(function()
     if queueteleport then
         queueteleport("loadstring(game:HttpGet('https://github.com/Roma77799/testik/raw/refs/heads/main/test1',true))()")

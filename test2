@@ -48,22 +48,29 @@ end)
 offer = false
 getgenv().stop = false
 
-while playerGui:FindFirstChild("DeviceSelect") do
+repeat
+    wait(1)
     print("waiting for device")
 
     local deviceSelect = playerGui:FindFirstChild("DeviceSelect")
-    if not deviceSelect then continue end
+    if not deviceSelect then
+        break
+    end
 
     local container = deviceSelect:FindFirstChild("Container")
-    if not container then continue end
+    if not container then
+        break
+    end
 
     local tablet = container:FindFirstChild("Tablet")
-    if not tablet then continue end
+    if not tablet then
+        break
+    end
 
     local selectt = tablet:FindFirstChild("Button")
     if not selectt then
         print("selectt не найден, выходим из цикла")
-        continue
+        break
     end
 
     -- Если нашли кнопку, кликаем
@@ -71,8 +78,9 @@ while playerGui:FindFirstChild("DeviceSelect") do
     if connections and connections[1] then
         connections[1]:Fire()
     end
-    task.wait(1)
-end
+
+until not playerGui:FindFirstChild("DeviceSelect")
+
 
 local targetName = getgenv().name
 local function get_device_type()

@@ -1,3 +1,4 @@
+print("load1")
 getgenv().gg = false
 if getgenv().gg then
     print("already")
@@ -5,6 +6,7 @@ if getgenv().gg then
 end
 
 getgenv().gg = true
+print("load2")
 repeat wait() until game:IsLoaded()
 local virtualUser = game:GetService("VirtualUser")
 game:GetService("Players").LocalPlayer.Idled:Connect(function()
@@ -33,6 +35,7 @@ task.spawn(function()
     end
     if playerGui:FindFirstChild("Loading") then
         TeleportService:Teleport(18845424641)
+        return
     end
 end)
 

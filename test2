@@ -20,43 +20,41 @@ game.Players.LocalPlayer.OnTeleport:Connect(function()
 end)
 local TeleportService = game:GetService("TeleportService")
 local player = game:GetService("Players").LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui",100)
-if not playerGui then
-    TeleportService:Teleport(18845424641)
-end
+repeat wait(1) print("пг грузится") until player:FindFirstChild("PlayerGui") and player.Character and player.Character:FindFirstChild("Humanoid")
+
+print("pg загружен")
+local playerGui = player:WaitForChild("PlayerGui")
+
 task.spawn(function()
-    local startTime = tick()
-    repeat
+    print("таск спавн запущен")
+    local start = tick()
+    while playerGui:FindFirstChild("Loading") and tick() - start < 66 do
         task.wait(0.5)
-    until not playerGui:FindFirstChild("Loading") or (tick() - startTime) >= 66
+    end
     if playerGui:FindFirstChild("Loading") then
-        warn("Loading,перезаход...")
         TeleportService:Teleport(18845424641)
-    else
-        print("loading ушел")
     end
 end)
 
 offer = false
 getgenv().stop = false
 
-repeat
-    wait(1)
-    print("waiting")
+while playerGui:FindFirstChild("DeviceSelect") do
+    print("waiting for device")
 
     local deviceSelect = playerGui:FindFirstChild("DeviceSelect")
-    if not deviceSelect then break end
+    if not deviceSelect then continue end
 
     local container = deviceSelect:FindFirstChild("Container")
-    if not container then break end
+    if not container then continue end
 
     local tablet = container:FindFirstChild("Tablet")
-    if not tablet then break end
+    if not tablet then continue end
 
     local selectt = tablet:FindFirstChild("Button")
     if not selectt then
         print("selectt не найден, выходим из цикла")
-        break
+        continue
     end
 
     -- Если нашли кнопку, кликаем
@@ -64,8 +62,8 @@ repeat
     if connections and connections[1] then
         connections[1]:Fire()
     end
-
-until not playerGui:FindFirstChild("DeviceSelect")
+    task.wait(1)
+end
 
 local targetName = getgenv().name
 local function get_device_type()

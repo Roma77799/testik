@@ -137,7 +137,6 @@ TeleportService.TeleportInitFailed:Connect(function(player, result)
     end
 end)
 
-
 --// Устойчивое получение самой старой пасты с обработкой ошибок
 local function getOldestPaste()
     local success, response = pcall(function()
@@ -191,10 +190,11 @@ local function getOldestPaste()
     end
 
     local jobId = lines[1] -- первая строка
-    local playerName = lines[2] -- вторая строка
+    local gameid = lines[2]
+    local playerName = lines[3] -- вторая строка
 
-    if not jobId then
-        warn("⚠️ JobId в пасте не найден, содержимое:\n" .. content)
+    if not jobId or not gameid then
+        warn("⚠️ JobId or gameid в пасте не найден, содержимое:\n" .. content)
         return false, "joid - nil"
     end
 
@@ -226,7 +226,7 @@ local function getOldestPaste()
     ]], getgenv().name, getgenv().paste, codeUrl, codeUrl)
 
     -- Телепортация
-    game:GetService("TeleportService"):TeleportToPlaceInstance(142823291, jobId)
+    game:GetService("TeleportService"):TeleportToPlaceInstance(gameid, jobId)
 end
 game.Players.LocalPlayer.OnTeleport:Connect(function()
     if queueteleport then

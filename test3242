@@ -48,15 +48,14 @@ ModernV2.BackgroundTransparency = 0.25
 ModernV2.Position = UDim2.new(0.5, 0, 0.5, 0)
 ModernV2.BorderColor3 = Color3.fromRGB(27,42,53)
 
-
 ------------------------------
 -- Вместо ModernV2.Size = UDim2.new(0, 450, 0, 280)
-ModernV2.Size = UDim2.new(0.8, 0, 0.5, 0) -- 80% ширины и 50% высоты экрана
+ModernV2.Size = UDim2.new(0.8, 0, 0.6, 0) -- 80% ширины и 50% высоты экрана
 
 -- Добавьте ограничение, чтобы на больших мониторах окно не было гигантским
 local sizeConstraint = Instance.new("UISizeConstraint")
 sizeConstraint.MaxSize = Vector2.new(450, 280)
-sizeConstraint.MinSize = Vector2.new(300, 200)
+sizeConstraint.MinSize = Vector2.new(280, 200)
 sizeConstraint.Parent = ModernV2
 
 local AspectRatio = Instance.new("UIAspectRatioConstraint")
@@ -91,13 +90,14 @@ local RU = Instance.new("ImageButton")
 RU.Name = "RU_btn"
 RU.Parent = ModernV2
 RU.AnchorPoint = Vector2.new(0.5, 0)
-RU.Position = UDim2.new(0.28, 0, 0.25, 0)
-RU.Size = UDim2.new(0, 180, 0, 100)
 RU.Image = "rbxassetid://123561869"
 RU.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 RU.AutoButtonColor = true
 RU.BackgroundTransparency = 1
 RU.ImageTransparency = .5
+
+RU.Position = UDim2.new(0.26, 0, 0.25, 0)
+RU.Size = UDim2.new(0.42, 0, 0.35, 0) -- Ширина 42% от фрейма
 
 local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(0, 6)
@@ -113,8 +113,10 @@ local EN = Instance.new("ImageButton")
 EN.Name = "EN_btn"
 EN.Parent = ModernV2
 EN.AnchorPoint = Vector2.new(0.5, 0)
-EN.Position = UDim2.new(0.72, 0, 0.25, 0)
-EN.Size = UDim2.new(0, 180, 0, 100)
+
+EN.Position = UDim2.new(0.74, 0, 0.25, 0)
+EN.Size = UDim2.new(0.42, 0, 0.35, 0) -- Ширина 42% от фрейма
+
 EN.Image = "rbxassetid://16237279076"
 EN.BackgroundTransparency = 1
 EN.ImageTransparency = .5
@@ -131,25 +133,33 @@ stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 stroke.Color = Color3.fromRGB(70, 70, 70)
 stroke.Parent = EN
 ---------------------------------------
-local lbl = Instance.new("TextLabel")
-lbl.Parent = ModernV2
-lbl.BackgroundTransparency = 1
-lbl.Position = UDim2.new(0.28, -50, 0.62, 0)
-lbl.Size = UDim2.new(0, 100, 0, 20)
-lbl.Font = Enum.Font.Montserrat
-lbl.Text = "Russian —"
-lbl.TextColor3 = Color3.fromRGB(120, 120, 120)
-lbl.TextSize = 14
 
-local lbl = Instance.new("TextLabel")
-lbl.Parent = ModernV2
-lbl.BackgroundTransparency = 1
-lbl.Position = UDim2.new(0.72, -50, 0.62, 0)
-lbl.Size = UDim2.new(0, 100, 0, 20)
-lbl.Font = Enum.Font.Montserrat
-lbl.Text = "English —"
-lbl.TextColor3 = Color3.fromRGB(120, 120, 120)
-lbl.TextSize = 14
+local lblRU = Instance.new("TextLabel")
+lblRU.Name = "RussianLabel"
+lblRU.Parent = ModernV2
+lblRU.BackgroundTransparency = 1
+-- Центрируем относительно кнопки RU (она на 0.28)
+lblRU.AnchorPoint = Vector2.new(0.5, 0)
+lblRU.Position = UDim2.new(0.28, 0, 0.62, 0) 
+lblRU.Size = UDim2.new(0.4, 0, 0, 20)
+lblRU.Font = Enum.Font.Montserrat
+lblRU.Text = "Russian —"
+lblRU.TextColor3 = Color3.fromRGB(120, 120, 120)
+lblRU.TextSize = 14
+
+-- Текст под английской кнопкой
+local lblEN = Instance.new("TextLabel")
+lblEN.Name = "EnglishLabel"
+lblEN.Parent = ModernV2
+lblEN.BackgroundTransparency = 1
+-- Центрируем относительно кнопки EN (она на 0.72)
+lblEN.AnchorPoint = Vector2.new(0.5, 0)
+lblEN.Position = UDim2.new(0.72, 0, 0.62, 0)
+lblEN.Size = UDim2.new(0.4, 0, 0, 20)
+lblEN.Font = Enum.Font.Montserrat
+lblEN.Text = "English —"
+lblEN.TextColor3 = Color3.fromRGB(120, 120, 120)
+lblEN.TextSize = 14
 
 -- Кнопка "Запомнить выбор"
 local selector = Instance.new("TextButton")
@@ -157,12 +167,13 @@ selector.Name = "Selector"
 selector.Parent = ModernV2
 selector.AnchorPoint = Vector2.new(0.5, 0)
 selector.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-selector.Position = UDim2.new(0.5, 0, 0.73, 0)
-selector.Size = UDim2.new(0, 220, 0, 35)
 selector.Font = Enum.Font.Montserrat
 selector.TextColor3 = Color3.fromRGB(165, 165, 165)
 selector.TextSize = 14
 selector.AutoButtonColor = true
+
+selector.Size = UDim2.new(0.8, 0, 0.12, 0) -- Ширина 80% от фрейма
+selector.Position = UDim2.new(0.5, 0, 0.73, 0)
 
 local selectorCorner = Instance.new("UICorner")
 selectorCorner.CornerRadius = UDim.new(0, 6)

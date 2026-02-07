@@ -1,0 +1,271 @@
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
+
+-- Проверка функций сохранения
+local canSave = (type(readfile) == "function" and type(writefile) == "function")
+
+-- Настройки по умолчанию
+local showGui = true
+local selectedLang = "en"
+local configName = "configlanguage.json"
+
+-- Загрузка конфига
+if canSave and isfile(configName) then
+    local success, data = pcall(function() return HttpService:JSONDecode(readfile(configName)) end)
+    if success and data then
+        selectedLang = data.language or "en"
+        if data.choice == true then
+            showGui = false
+        end
+    end
+end
+
+-- Переводы
+local translations = {
+    ru = { Title = "Выберите язык ~", Toggle = "Запомнить мой выбор", Load = "ПОДТВЕРДИТЬ" },
+    en = { Title = "Select language ~", Toggle = "Remember my choice", Load = "LOAD" }
+}
+
+-- Удаление старого GUI если есть
+if CoreGui:FindFirstChild("LanguageSelector") then
+    CoreGui.LanguageSelector:Destroy()
+end
+
+-- Создание интерфейса
+local screen = Instance.new("ScreenGui")
+screen.Name = "LanguageSelector"
+screen.Parent = CoreGui
+screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- Основной фрейм
+local ModernV2 = Instance.new("Frame")
+ModernV2.Name = "ModernV2"
+ModernV2.Parent = screen
+ModernV2.AnchorPoint = Vector2.new(0.5, 0.5)
+ModernV2.BackgroundColor3 = Color3.fromRGB(25,25,25)
+ModernV2.BackgroundTransparency = 0.25
+ModernV2.Position = UDim2.new(0.5, 0, 0.5, 0)
+ModernV2.Size = UDim2.new(0, 450, 0, 280)
+ModernV2.BorderColor3 = Color3.fromRGB(27,42,53)
+
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 6)
+UICorner.Parent = ModernV2
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Thickness = 1
+MainStroke.Color = Color3.fromRGB(132, 132, 132)
+MainStroke.Parent = ModernV2
+
+-- Заголовок
+local Title = Instance.new("TextLabel")
+Title.Name = "Title"
+Title.Parent = ModernV2
+Title.BackgroundTransparency = 1
+Title.Position = UDim2.new(0.05, 0, 0.05, 0)
+Title.Size = UDim2.new(0.9, 0, 0.15, 0)
+Title.Font = Enum.Font.Montserrat
+Title.Text = translations[selectedLang].Title
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 22
+Title.TextXAlignment = Enum.TextXAlignment.Left
+
+---------------------------
+local RU = Instance.new("ImageButton")
+RU.Name = "RU_btn"
+RU.Parent = ModernV2
+RU.AnchorPoint = Vector2.new(0.5, 0)
+RU.Position = UDim2.new(0.28, 0, 0.25, 0)
+RU.Size = UDim2.new(0, 180, 0, 100)
+RU.Image = "rbxassetid://123561869"
+RU.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+RU.AutoButtonColor = true
+RU.BackgroundTransparency = 1
+RU.ImageTransparency = .5
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 6)
+corner.Parent = RU
+
+local stroke = Instance.new("UIStroke")
+stroke.Thickness = 1
+stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+stroke.Color = Color3.fromRGB(70, 70, 70)
+stroke.Parent = RU
+
+local EN = Instance.new("ImageButton")
+EN.Name = "EN_btn"
+EN.Parent = ModernV2
+EN.AnchorPoint = Vector2.new(0.5, 0)
+EN.Position = UDim2.new(0.72, 0, 0.25, 0)
+EN.Size = UDim2.new(0, 180, 0, 100)
+EN.Image = "rbxassetid://16237279076"
+EN.BackgroundTransparency = 1
+EN.ImageTransparency = .5
+EN.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+EN.AutoButtonColor = true
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 6)
+corner.Parent = EN
+
+local stroke = Instance.new("UIStroke")
+stroke.Thickness = 1
+stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+stroke.Color = Color3.fromRGB(70, 70, 70)
+stroke.Parent = EN
+---------------------------------------
+local lbl = Instance.new("TextLabel")
+lbl.Parent = ModernV2
+lbl.BackgroundTransparency = 1
+lbl.Position = UDim2.new(0.28, -50, 0.62, 0)
+lbl.Size = UDim2.new(0, 100, 0, 20)
+lbl.Font = Enum.Font.Montserrat
+lbl.Text = "Russian —"
+lbl.TextColor3 = Color3.fromRGB(120, 120, 120)
+lbl.TextSize = 14
+
+local lbl = Instance.new("TextLabel")
+lbl.Parent = ModernV2
+lbl.BackgroundTransparency = 1
+lbl.Position = UDim2.new(0.72, -50, 0.62, 0)
+lbl.Size = UDim2.new(0, 100, 0, 20)
+lbl.Font = Enum.Font.Montserrat
+lbl.Text = "English —"
+lbl.TextColor3 = Color3.fromRGB(120, 120, 120)
+lbl.TextSize = 14
+
+-- Кнопка "Запомнить выбор"
+local selector = Instance.new("TextButton")
+selector.Name = "Selector"
+selector.Parent = ModernV2
+selector.AnchorPoint = Vector2.new(0.5, 0)
+selector.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+selector.Position = UDim2.new(0.5, 0, 0.73, 0)
+selector.Size = UDim2.new(0, 220, 0, 35)
+selector.Font = Enum.Font.Montserrat
+selector.TextColor3 = Color3.fromRGB(165, 165, 165)
+selector.TextSize = 14
+selector.AutoButtonColor = true
+
+local selectorCorner = Instance.new("UICorner")
+selectorCorner.CornerRadius = UDim.new(0, 6)
+selectorCorner.Parent = selector
+
+local stroke = Instance.new("UIStroke")
+stroke.Thickness = 1
+stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+stroke.Color = Color3.fromRGB(165, 165, 165)
+stroke.Parent = selector
+
+-- Кнопка Load
+local Load = Instance.new("TextButton")
+Load.Name = "Load"
+Load.Parent = ModernV2
+Load.AnchorPoint = Vector2.new(0.5, 0)
+Load.Position = UDim2.new(0.5, 0, 0.88, 0)
+Load.Size = UDim2.new(0.9, 0, 0.08, 0)
+Load.BackgroundColor3 = Color3.fromRGB(165, 165, 165)
+Load.BackgroundTransparency = 0.7
+Load.Font = Enum.Font.MontserratBold
+Load.TextColor3 = Color3.fromRGB(165, 165, 165)
+Load.TextSize = 14
+
+local loadCorner = Instance.new("UICorner")
+loadCorner.CornerRadius = UDim.new(0, 4)
+loadCorner.Parent = Load
+
+local stroke = Instance.new("UIStroke")
+stroke.Thickness = 1
+stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+stroke.Color = Color3.fromRGB(165, 165, 165)
+stroke.Parent = Load
+--- ЛОГИКА ---
+
+local rememberChoice = false
+
+local function applyTranslation(lang)
+    Title.Text = translations[lang].Title
+    Load.Text = translations[lang].Load
+    selector.Text = (rememberChoice and "✅ " or "❌ ") .. translations[lang].Toggle
+end
+
+local function highlightSelection(lang)
+    local activeColor = Color3.fromRGB(0, 255, 150)
+    local idleColor = Color3.fromRGB(70, 70, 70)
+    
+    RU:FindFirstChild("UIStroke").Color = (lang == "ru" and activeColor or idleColor)
+    EN:FindFirstChild("UIStroke").Color = (lang == "en" and activeColor or idleColor)
+end
+
+-- Обработка кликов
+selector.MouseButton1Click:Connect(function()
+    rememberChoice = not rememberChoice
+    applyTranslation(selectedLang)
+end)
+
+RU.MouseButton1Click:Connect(function()
+	task.spawn(function()
+    	local s = Instance.new("Sound", game:GetService("SoundService"))
+		s.SoundId = "rbxassetid://122274686053302"
+		s:Play()
+		s.Ended:Wait()
+		s:Destroy()
+	end)
+    selectedLang = "ru"
+    highlightSelection("ru")
+    applyTranslation("ru")
+end)
+
+EN.MouseButton1Click:Connect(function()
+	task.spawn(function()
+    	local s = Instance.new("Sound", game:GetService("SoundService"))
+		s.SoundId = "rbxassetid://122274686053302"
+		s:Play()
+		s.Ended:Wait()
+		s:Destroy()
+	end)
+    selectedLang = "en"
+    highlightSelection("en")
+    applyTranslation("en")
+end)
+
+Load.MouseButton1Click:Connect(function()
+	task.spawn(function()
+    	local s = Instance.new("Sound", game:GetService("SoundService"))
+		s.SoundId = "rbxassetid://117649901456711"
+		s:Play()
+		s.Ended:Wait()
+		s:Destroy()
+	end)
+	if canSave then
+        local data = { language = selectedLang, choice = rememberChoice }
+        writefile(configName, HttpService:JSONEncode(data))
+    end
+
+    screen:Destroy()
+	if getgenv().R3TH_Device == "Mobile" then
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/GamesMobile/mm2.lua"))()
+	else
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Roma77799/Secrethub/main/Games/mm2.lua"))()
+	end
+end)
+
+if showGui then
+    applyTranslation(selectedLang)
+    highlightSelection(selectedLang)
+else
+    if canSave then
+        local data = { language = selectedLang, choice = rememberChoice }
+        writefile(configName, HttpService:JSONEncode(data))
+    end
+    
+    screen:Destroy()
+    if getgenv().R3TH_Device == "Mobile" then
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Roma77799/Secrethub/refs/heads/main/GamesMobile/mm2.lua"))()
+	else
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/Roma77799/Secrethub/main/Games/mm2.lua"))()
+	end
+end

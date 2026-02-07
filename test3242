@@ -46,9 +46,23 @@ ModernV2.AnchorPoint = Vector2.new(0.5, 0.5)
 ModernV2.BackgroundColor3 = Color3.fromRGB(25,25,25)
 ModernV2.BackgroundTransparency = 0.25
 ModernV2.Position = UDim2.new(0.5, 0, 0.5, 0)
-ModernV2.Size = UDim2.new(0, 450, 0, 280)
 ModernV2.BorderColor3 = Color3.fromRGB(27,42,53)
 
+
+------------------------------
+-- Вместо ModernV2.Size = UDim2.new(0, 450, 0, 280)
+ModernV2.Size = UDim2.new(0.8, 0, 0.5, 0) -- 80% ширины и 50% высоты экрана
+
+-- Добавьте ограничение, чтобы на больших мониторах окно не было гигантским
+local sizeConstraint = Instance.new("UISizeConstraint")
+sizeConstraint.MaxSize = Vector2.new(450, 280)
+sizeConstraint.MinSize = Vector2.new(300, 200)
+sizeConstraint.Parent = ModernV2
+
+local AspectRatio = Instance.new("UIAspectRatioConstraint")
+AspectRatio.AspectRatio = 1.6 -- Соотношение ширины к высоте
+AspectRatio.Parent = ModernV2
+---------------------
 
 local UICorner = Instance.new("UICorner")
 UICorner.CornerRadius = UDim.new(0, 6)

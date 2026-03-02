@@ -165,19 +165,13 @@ local function getOldestPaste()
         spawn(function()
             repeat task.wait() until game:IsLoaded()
             local success, err = pcall(function()
-                local code
-                if game.HttpGetAsync then
-                    code = game:HttpGetAsync("%s")
-                else
-                    code = game:HttpGet("%s")
-                end
+                local code = game:HttpGet("%s")
                 if not code or code == "" then error("Failed to fetch script") end
-                if code:sub(1,1) == "<" then error("Получен HTML вместо Lua") end
                 local func, compileErr = loadstring(code)
                 if not func then error("Ошибка компиляции: "..tostring(compileErr)) end
                 func()
             end)
-            if not success then warn("Ошибка при выполнении скрипта после телепорта:", err) end
+            if not success then warn("Ошибка после телепорта:", err) end
         end)
     ]], getgenv().name, getgenv().paste, codeUrl)
 
@@ -212,7 +206,7 @@ while true do
     elseif result == false then
         -- Сюда попадаем, если паст просто нет или API Pastefy вернуло ошибку
         if msg ~= "Паст нет" then 
-            warn("ℹСтатус:", msg) 
+            warn("Статус:", msg) 
         end
         
         -- Если это ошибка 503 или 504 (Pastefy устал), ждем дольше

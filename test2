@@ -179,17 +179,15 @@ local HttpService = game:GetService("HttpService")
 
 apiKey = "S3mWs7P1fzVUPTmcjjpvekjKO7N72sI0tZFgVx5N2FS92yCP6XkxniDX4mND"
 
-deleteUrl = "https://pastefy.app/api/v2/paste/" .. getgenv().paste
-
 function deletePaste()
     while true do
         local response = request({
-            Url = deleteUrl,
+            Url = "https://pastefy.app/api/v2/paste/" .. getgenv().paste,
             Method = "DELETE",
             Headers = {
-                Accept = "application/json",
                 ["Authorization"] = "Bearer " .. apiKey,
-            },
+                ["Accept"] = "application/json"
+            }
         })
 
         if not response then

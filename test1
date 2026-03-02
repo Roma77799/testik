@@ -46,10 +46,11 @@ local function parseDateTime(dateStr)
     return 0
 end
 
---// Функция удаления пасты
 local function deletePaste(pasteId)
     if not pasteId or pasteId == "" or pasteId == lastDeletedId then return false end
-    local response = pcall(function()
+    
+    -- Исправлено: Одинарные скобки и pcall для стабильности
+    local success, response = pcall(function()
         return request({
             Url = "https://pastefy.app/api/v2/paste/" .. pasteId,
             Method = "DELETE",
@@ -60,13 +61,16 @@ local function deletePaste(pasteId)
         })
     end)
     
-    lastDeletedId = pasteId -- Сразу помечаем как удаленную в памяти
+    lastDeletedId = pasteId 
     
-    if not response then return false, "No response" end
+    if not success or not response then 
+        warn("❌ Ошибка выполнения запроса удаления")
+        return false 
+    end
 
     if response.StatusCode == 404 then
         warn("❌ Паста уже удалена (404):", pasteId)
-        return true -- Считаем успехом, раз её и так нет
+        return true 
     end
 
     if response.StatusCode == 200 or response.StatusCode == 204 then

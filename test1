@@ -20,12 +20,6 @@ local lastDeletedId = "" -- Чтобы не пытаться обработат�
 local teleportFailedHandled = false
 local isProcessing = false -- Флаг, чтобы цикл не мешал телепорту
 
---// Заголовки
-local headers = {
-    ["Accept"] = "application/json",
-    ["Content-Type"] = "application/json",
-    ["Authorization"] = "Bearer " .. apiKey,
-}
 
 --// Анти-АФК
 Players.LocalPlayer.Idled:Connect(function()
@@ -55,11 +49,16 @@ end
 --// Функция удаления пасты
 local function deletePaste(pasteId)
     if not pasteId or pasteId == "" or pasteId == lastDeletedId then return false end
-
-    local deleteUrl = "https://pastefy.app/api/v2/paste/" .. pasteId
-    local req = { Url = deleteUrl, Method = "DELETE", Headers = headers }
-    local response = request(req)
-
+    
+    local response = request{{
+        Url = "https://pastefy.app/api/v2/paste/" .. pasteId,
+        Method = "DELETE",
+        Headers = {
+            ["Authorization"] = "Bearer " .. apiKey,
+            ["Accept"] = "application/json"
+        }
+    }}
+    
     lastDeletedId = pasteId -- Сразу помечаем как удаленную в памяти
     
     if not response then return false, "No response" end
@@ -98,7 +97,7 @@ TeleportService.TeleportInitFailed:Connect(function(player, result)
             getgenv().name = nil
         end
         
-        task.wait(3) -- Пауза, чтобы API Pastefy успело обновиться
+        task.wait(5) -- Пауза, чтобы API Pastefy успело обновиться
         teleportFailedHandled = false
         isProcessing = false -- Разрешаем циклу искать новую пасту
     end
@@ -112,7 +111,11 @@ local function getOldestPaste()
         return request({
             Url = "https://pastefy.app/api/v2/user/pastes",
             Method = "GET",
-            Headers = headers
+            Headers = {
+                ["Accept"] = "application/json",
+                ["Content-Type"] = "application/json",
+                ["Authorization"] = "Bearer " .. apiKey,
+            }
         })
     end)
 
@@ -211,7 +214,7 @@ while true do
         
         -- Если это ошибка 503 или 504 (Pastefy устал), ждем дольше
         if tostring(msg):find("503") or tostring(msg):find("504") then
-            task.wait(10)
+            task.wait(1)
         else
             task.wait(6)
         end

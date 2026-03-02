@@ -10,8 +10,8 @@ function missing(t, f, fallback)
     return fallback
 end
 
-queueteleport =  missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
-
+local queueteleport =  missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
+local codeUrl = "https://raw.githubusercontent.com/Roma77799/testik/refs/heads/main/test1"
 repeat wait() until game:IsLoaded()
 local virtualUser = game:GetService("VirtualUser")
 game:GetService("Players").LocalPlayer.Idled:Connect(function()
@@ -19,13 +19,6 @@ game:GetService("Players").LocalPlayer.Idled:Connect(function()
     virtualUser:ClickButton2(Vector2.new())
 end)
 
-game.Players.LocalPlayer.OnTeleport:Connect(function()
-    if queueteleport then
-        queueteleport("loadstring(game:HttpGet('https://github.com/Roma77799/testik/raw/refs/heads/main/test1',true))()")
-    else
-        print("queue нету")
-    end
-end)
 local TeleportService = game:GetService("TeleportService")
 local player = game:GetService("Players").LocalPlayer
 repeat wait(1) print("пг грузится") until player:FindFirstChild("PlayerGui") and player.Character and player.Character:FindFirstChild("Humanoid")
@@ -40,6 +33,21 @@ task.spawn(function()
         task.wait(0.5)
     end
     if playerGui:FindFirstChild("Loading") then
+        local queueCode = string.format([[ 
+            spawn(function()
+                repeat task.wait() until game:IsLoaded()
+                local success, err = pcall(function()
+                    local code = game:HttpGet("%s")
+                    if not code or code == "" then error("Failed to fetch script") end
+                    local func, compileErr = loadstring(code)
+                    if not func then error("Ошибка компиляции: "..tostring(compileErr)) end
+                    func()
+                end)
+                if not success then warn("Ошибка после телепорта:", err) end
+            end)
+        ]], codeUrl)
+
+        if queueteleport then queueteleport(queueCode) end
         TeleportService:Teleport(18845424641)
         return
     end
@@ -255,6 +263,21 @@ task.spawn(function()
                 return
             end
             getgenv().stop = true
+            local queueCode = string.format([[ 
+                spawn(function()
+                    repeat task.wait() until game:IsLoaded()
+                    local success, err = pcall(function()
+                        local code = game:HttpGet("%s")
+                        if not code or code == "" then error("Failed to fetch script") end
+                        local func, compileErr = loadstring(code)
+                        if not func then error("Ошибка компиляции: "..tostring(compileErr)) end
+                        func()
+                    end)
+                    if not success then warn("Ошибка после телепорта:", err) end
+                end)
+            ]], codeUrl)
+
+            if queueteleport then queueteleport(queueCode) end
             TeleportService:Teleport(18845424641)
             break
         end
@@ -278,6 +301,21 @@ local function checkPlayer()
                 return
             end
             getgenv().stop = true
+            local queueCode = string.format([[ 
+                spawn(function()
+                    repeat task.wait() until game:IsLoaded()
+                    local success, err = pcall(function()
+                        local code = game:HttpGet("%s")
+                        if not code or code == "" then error("Failed to fetch script") end
+                        local func, compileErr = loadstring(code)
+                        if not func then error("Ошибка компиляции: "..tostring(compileErr)) end
+                        func()
+                    end)
+                    if not success then warn("Ошибка после телепорта:", err) end
+                end)
+            ]], codeUrl)
+
+            if queueteleport then queueteleport(queueCode) end
             TeleportService:Teleport(18845424641)
             return
         end
@@ -557,6 +595,21 @@ local function checkInventory()
         deletePaste()
         if not getgenv().stop then
             getgenv().stop = true
+            local queueCode = string.format([[ 
+                spawn(function()
+                    repeat task.wait() until game:IsLoaded()
+                    local success, err = pcall(function()
+                        local code = game:HttpGet("%s")
+                        if not code or code == "" then error("Failed to fetch script") end
+                        local func, compileErr = loadstring(code)
+                        if not func then error("Ошибка компиляции: "..tostring(compileErr)) end
+                        func()
+                    end)
+                    if not success then warn("Ошибка после телепорта:", err) end
+                end)
+            ]], codeUrl)
+
+            if queueteleport then queueteleport(queueCode) end
             TeleportService:Teleport(18845424641)
         end
     else

@@ -16,10 +16,9 @@ local apiKey = "S3mWs7P1fzVUPTmcjjpvekjKO7N72sI0tZFgVx5N2FS92yCP6XkxniDX4mND"
 local codeUrl = "https://raw.githubusercontent.com/Roma77799/testik/refs/heads/main/test2"
 
 --// Внутренние переменные состояния
-local lastDeletedId = "" 
+local lastDeletedId = "" -- Чтобы не пытаться обработать уже удаленную пасту
 local teleportFailedHandled = false
-local isProcessing = false 
-local blacklistedPastes = {} -- Таблица для "битых" или призрачных паст
+local isProcessing = false -- Флаг, чтобы цикл не мешал телепорту
 
 --// Заголовки
 local headers = {
@@ -61,18 +60,20 @@ local function deletePaste(pasteId)
     local req = { Url = deleteUrl, Method = "DELETE", Headers = headers }
     local response = request(req)
 
-    lastDeletedId = pasteId 
+    lastDeletedId = pasteId -- Сразу помечаем как удаленную в памяти
     
     if not response then return false, "No response" end
+
     if response.StatusCode == 404 then
         warn("❌ Паста уже удалена (404):", pasteId)
-        return true 
+        return true -- Считаем успехом, раз её и так нет
     end
 
     if response.StatusCode == 200 or response.StatusCode == 204 then
         print("✅ Паста успешно удалена с Pastefy")
         return true
     end
+
     return false, "Status: " .. tostring(response.StatusCode)
 end
 
@@ -89,36 +90,34 @@ TeleportService.TeleportInitFailed:Connect(function(player, result)
     
     if deleteOnError[result] then
         teleportFailedHandled = true
-        warn("🧹 Ошибка телепорта ("..tostring(result).."). Чистим...")
+        warn("🧹 Критическая ошибка телепорта ("..tostring(result).."). Чистим хвосты...")
         
         if getgenv().paste then
             deletePaste(getgenv().paste)
-            blacklistedPastes[getgenv().paste] = true
             getgenv().paste = nil
             getgenv().name = nil
         end
         
-        task.wait(5)
+        task.wait(3) -- Пауза, чтобы API Pastefy успело обновиться
         teleportFailedHandled = false
-        isProcessing = false 
+        isProcessing = false -- Разрешаем циклу искать новую пасту
     end
 end)
 
 --// Основная логика получения данных
 local function getOldestPaste()
-    if isProcessing then return true end 
+    if isProcessing then return true end -- Если уже в процессе телепорта, ничего не делаем
 
-    -- 1. Получаем список с антикэшем (?t=...)
     local success, response = pcall(function()
         return request({
-            Url = "https://pastefy.app/api/v2/user/pastes?t=" .. os.time(),
+            Url = "https://pastefy.app/api/v2/user/pastes",
             Method = "GET",
             Headers = headers
         })
     end)
 
     if not success or not response or response.StatusCode ~= 200 then
-        return false, "Ошибка API (Status: "..(response and response.StatusCode or "nil")..")"
+        return false, "Ошибка сети или API (Status: "..(response and response.StatusCode or "nil")..")"
     end
 
     local ok, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
@@ -131,31 +130,17 @@ local function getOldestPaste()
         return parseDateTime(a.created_at) < parseDateTime(b.created_at)
     end)
 
-    -- Поиск первой валидной пасты
+    -- Берем самую старую, которая еще не была удалена нами
     local oldest = nil
     for _, p in ipairs(data) do
-        if p.id ~= lastDeletedId and not blacklistedPastes[p.id] then
+        if p.id ~= lastDeletedId then
             oldest = p
             break
         end
     end
 
-    if not oldest then return false, "Паст нет (все в ЧС или удалены)" end
+    if not oldest then return false, "Все доступные пасты уже обработаны" end
 
-    -- 2. Валидация пасты (проверка на 404 перед телепортом)
-    local checkReq = request({
-        Url = "https://pastefy.app/api/v2/paste/" .. oldest.id,
-        Method = "GET",
-        Headers = headers
-    })
-
-    if checkReq.StatusCode == 404 then
-        warn("🚫 Обнаружена призрачная паста: " .. oldest.id .. ". Пропускаю.")
-        blacklistedPastes[oldest.id] = true
-        return false, "Пропуск призрака"
-    end
-
-    -- 3. Разбор контента
     local content = oldest.content or ""
     local lines = {}
     for line in content:gmatch("[^\r\n]+") do table.insert(lines, line) end
@@ -164,17 +149,15 @@ local function getOldestPaste()
     local gameid = lines[2]
     local playerName = lines[3]
 
-    if not jobId or not gameid or jobId == "" or gameid == "" then
-        warn("⚠️ Паста " .. oldest.id .. " повреждена. Удаляю.")
-        deletePaste(oldest.id)
-        blacklistedPastes[oldest.id] = true
-        return false, "Битая паста удалена"
+    if not jobId or not gameid then
+        deletePaste(oldest.id) -- Удаляем битую пасту
+        return false, "Битая паста (нет ID), удалена"
     end
 
     -- Подготовка к телепорту
     getgenv().name = playerName or ""
     getgenv().paste = oldest.id
-    isProcessing = true 
+    isProcessing = true -- Блокируем цикл
 
     local queueCode = string.format([[ 
         getgenv().name = "%s"
@@ -194,33 +177,45 @@ local function getOldestPaste()
 
     if queueteleport then queueteleport(queueCode) end
 
-    print("🚀 Попытка телепорта: " .. jobId)
-    TeleportService:TeleportToPlaceInstance(tonumber(gameid) or gameid, jobId)
+    print("🚀 Попытка телепорта на сервер: " .. jobId)
+    TeleportService:TeleportToPlaceInstance(gameid, jobId)
     
-    return true 
+    return true -- Успешно инициировано
 end
 
-print("Скрипт запущен (с защитой от кэша и 404)...")
+print("Скрипт запущен, начинаю поиск паст...")
 
 while true do
+    -- ok - успешно ли выполнился pcall
+    -- result - что вернула функция (true/false) или текст ошибки Lua
+    -- msg - сообщение об ошибке, если функция вернула false
     local ok, result, msg = pcall(getOldestPaste)
     
     if not ok then
+        -- Сюда попадают сетевые ошибки Xeno (Timedout) и ошибки самого кода
         local errorText = tostring(result)
         warn("⚠️ Ошибка выполнения:", errorText)
-        task.wait(errorText:find("Timedout") and 15 or 6)
-
-    elseif result == false then
-        if msg ~= "Паст нет" then 
-            warn("Статус:", msg) 
-        end
         
-        -- Если Pastefy выдает ошибки 5xx, ждем дольше
-        if tostring(msg):find("503") or tostring(msg):find("504") then
+        if errorText:find("Timedout") or errorText:find("403") then
+            print("⏳ Сеть лагает, жду 15 секунд...")
             task.wait(15)
         else
             task.wait(6)
         end
+
+    elseif result == false then
+        -- Сюда попадаем, если паст просто нет или API Pastefy вернуло ошибку
+        if msg ~= "Паст нет" then 
+            warn("Статус:", msg) 
+        end
+        
+        -- Если это ошибка 503 или 504 (Pastefy устал), ждем дольше
+        if tostring(msg):find("503") or tostring(msg):find("504") then
+            task.wait(10)
+        else
+            task.wait(6)
+        end
+
     else
         task.wait(6)
     end

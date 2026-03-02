@@ -4,121 +4,79 @@ if getgenv().gg then
     return
 end
 getgenv().gg = true
-function missing(t, f, fallback)
-    if type(f) == t then return f end
-    return fallback
-end
-queueteleport =  missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
+
+--// Сервисы
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
 local virtualUser = game:GetService("VirtualUser")
-game:GetService("Players").LocalPlayer.Idled:Connect(function()
+
+--// Конфиг
+local apiKey = "S3mWs7P1fzVUPTmcjjpvekjKO7N72sI0tZFgVx5N2FS92yCP6XkxniDX4mND"
+local codeUrl = "https://raw.githubusercontent.com/Roma77799/testik/refs/heads/main/test2"
+
+--// Внутренние переменные состояния
+local lastDeletedId = "" 
+local teleportFailedHandled = false
+local isProcessing = false 
+local blacklistedPastes = {} -- Таблица для "битых" или призрачных паст
+
+--// Заголовки
+local headers = {
+    ["Accept"] = "application/json",
+    ["Content-Type"] = "application/json",
+    ["Authorization"] = "Bearer " .. apiKey,
+}
+
+--// Анти-АФК
+Players.LocalPlayer.Idled:Connect(function()
     virtualUser:CaptureController()
     virtualUser:ClickButton2(Vector2.new())
 end)
 
-local HttpService = game:GetService("HttpService")
+--// Утилиты
+function missing(t, f, fallback)
+    if type(f) == t then return f end
+    return fallback
+end
 
---// Конфиг
-local apiKey = "S3mWs7P1fzVUPTmcjjpvekjKO7N72sI0tZFgVx5N2FS92yCP6XkxniDX4mND"
---// Заголовки запроса
+local queueteleport = missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
 
 local function parseDateTime(dateStr)
     local year, month, day, hour, min, sec = dateStr:match("(%d+)%-(%d+)%-(%d+) (%d+):(%d+):(%d+)")
     if year then
         return os.time({
-            year = tonumber(year),
-            month = tonumber(month),
-            day = tonumber(day),
-            hour = tonumber(hour),
-            min = tonumber(min),
-            sec = tonumber(sec)
+            year = tonumber(year), month = tonumber(month), day = tonumber(day),
+            hour = tonumber(hour), min = tonumber(min), sec = tonumber(sec)
         })
     end
     return 0
 end
 
-local headers = {
-    Accept = "application/json",
-    ["Content-Type"] = "application/json",
-    ["Authorization"] = "Bearer " .. apiKey,
-}
-
+--// Функция удаления пасты
 local function deletePaste(pasteId)
-    if not pasteId then
-        warn("❌ Paste ID не задан!")
-        return false, "Paste ID не задан"
-    end
+    if not pasteId or pasteId == "" or pasteId == lastDeletedId then return false end
 
     local deleteUrl = "https://pastefy.app/api/v2/paste/" .. pasteId
     local req = { Url = deleteUrl, Method = "DELETE", Headers = headers }
     local response = request(req)
 
-    if not response then 
-        warn("❌ Нет ответа от сервера")
-        return false, "No response from request()"
-    end
-
-    print(("HTTP %s %s"):format(response.StatusCode or "?", response.StatusMessage or ""))
-
-    local parsed = nil
-    if response.Body and response.Body ~= "" then
-        local ok, res = pcall(function() 
-            return HttpService:JSONDecode(response.Body)
-        end)
-        if ok then
-            parsed = res
-        else
-            print("⚠️ Не удалось разобрать JSON, возможно это текстовое сообщение:", response.Body)
-            parsed = { success = false, message = response.Body }
-        end
-    end
-
+    lastDeletedId = pasteId 
+    
+    if not response then return false, "No response" end
     if response.StatusCode == 404 then
-        warn("❌ Паста не найдена или уже удалена:", pasteId)
-        if getgenv().name or getgenv().paste then 
-            getgenv().name = nil
-            getgenv().paste = nil 
-        end
-        return false, parsed
-    end
-
-    if parsed and parsed.success then
-        print("✅ Паста успешно удалена!")
-        if getgenv().name or getgenv().paste then 
-            getgenv().name = nil
-            getgenv().paste = nil
-        end
-        return true, parsed
+        warn("❌ Паста уже удалена (404):", pasteId)
+        return true 
     end
 
     if response.StatusCode == 200 or response.StatusCode == 204 then
-        print("✅ Паста удалена (нет тела ответа)")
-        if getgenv().name or getgenv().paste then 
-            getgenv().name = nil
-            getgenv().paste = nil 
-        end
-        return true, parsed
+        print("✅ Паста успешно удалена с Pastefy")
+        return true
     end
-
-    warn("❌ Не удалось удалить пасту:", parsed)
-    return false, parsed
+    return false, "Status: " .. tostring(response.StatusCode)
 end
 
-
-local TeleportService = game:GetService("TeleportService")
-
--- Словарь с понятными сообщениями
-local teleportMessages = {
-    [Enum.TeleportResult.Success] = "✅ Телепортация прошла успешно.",
-    [Enum.TeleportResult.Failure] = "⚠️ Неизвестная ошибка при телепортации.",
-    [Enum.TeleportResult.GameNotFound] = "❌ Игра не найдена (возможно сервер закрыт).",
-    [Enum.TeleportResult.GameEnded] = "❌ Целевой сервер завершил работу.",
-    [Enum.TeleportResult.GameFull] = "🚫 Сервер заполнен, попробуйте позже.",
-    [Enum.TeleportResult.Unauthorized] = "⛔ Нет прав на телепортацию в этот сервер.",
-    [Enum.TeleportResult.Flooded] = "⚠️ Слишком много запросов на телепорт, подождите немного.",
-    [Enum.TeleportResult.IsTeleporting] = "ℹ️ Телепорт уже выполняется.",
-}
-
--- Ошибки, при которых нужно удалить пасту
+--// Обработка ошибок телепорта
 local deleteOnError = {
     [Enum.TeleportResult.GameNotFound] = true,
     [Enum.TeleportResult.GameEnded] = true,
@@ -126,143 +84,144 @@ local deleteOnError = {
     [Enum.TeleportResult.Failure] = true,
 }
 
--- Чтобы не вызывать deletePaste несколько раз
-local teleportFailedHandled = false
-
 TeleportService.TeleportInitFailed:Connect(function(player, result)
-    local message = teleportMessages[result] or ("⚠️ Неизвестный результат телепортации: " .. tostring(result))
-    warn(message)
-
-    if teleportFailedHandled then
-        print("⏹️ Ошибка телепорта уже была обработана, пропускаем повтор.")
-        return
-    end
-
+    if teleportFailedHandled then return end
+    
     if deleteOnError[result] then
         teleportFailedHandled = true
-        print("🧹 Критическая ошибка телепорта. Удаляем пасту...")
-        deletePaste(getgenv().paste)
+        warn("🧹 Ошибка телепорта ("..tostring(result).."). Чистим...")
+        
+        if getgenv().paste then
+            deletePaste(getgenv().paste)
+            blacklistedPastes[getgenv().paste] = true
+            getgenv().paste = nil
+            getgenv().name = nil
+        end
+        
+        task.wait(5)
         teleportFailedHandled = false
-    else
-        print(result)
-        print("ℹ️ Паста не будет удалена, так как ошибка не критическая.")
+        isProcessing = false 
     end
 end)
 
---// Устойчивое получение самой старой пасты с обработкой ошибок
+--// Основная логика получения данных
 local function getOldestPaste()
+    if isProcessing then return true end 
+
+    -- 1. Получаем список с антикэшем (?t=...)
     local success, response = pcall(function()
         return request({
-            Url = "https://pastefy.app/api/v2/user/pastes",
+            Url = "https://pastefy.app/api/v2/user/pastes?t=" .. os.time(),
             Method = "GET",
             Headers = headers
         })
     end)
 
-    if not success or not response then
-        warn("❌ Ошибка запроса к Pastefy или нет ответа.")
-        return false, "нет ответа либо ошибка запроса"
+    if not success or not response or response.StatusCode ~= 200 then
+        return false, "Ошибка API (Status: "..(response and response.StatusCode or "nil")..")"
     end
 
-    -- Обработка статусов
-    if response.StatusCode == 503 or response.StatusCode == 504 then
-        warn("🌐 Pastefy временно недоступен" .. response.StatusCode)
-        return false, "503 ERROR пастефай не доступен"
-    elseif response.StatusCode ~= 200 then
-        warn("❌ Ошибка при получении паст:", response.StatusCode, response.StatusMessage)
-        if response.Body then warn("Ответ сервера:", response.Body) end
-        return false, "NOT 200 ERROR"
-    end
-
-    -- Попытка парсинга JSON
-    local ok, data = pcall(function()
-        return HttpService:JSONDecode(response.Body)
-    end)
-
+    local ok, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
     if not ok or type(data) ~= "table" or #data == 0 then
-        warn("⚠️ Не удалось разобрать JSON или пасты отсутствуют")
-        return false, "паст нет"
+        return false, "Паст нет"
     end
 
-    -- Сортировка по дате создания
+    -- Сортировка по дате
     table.sort(data, function(a, b)
         return parseDateTime(a.created_at) < parseDateTime(b.created_at)
     end)
 
-    local oldest = data[1]
-    if not oldest then
-        warn("⚠️ Паста не найдена")
-        return false, "самой старой нету"
+    -- Поиск первой валидной пасты
+    local oldest = nil
+    for _, p in ipairs(data) do
+        if p.id ~= lastDeletedId and not blacklistedPastes[p.id] then
+            oldest = p
+            break
+        end
     end
 
+    if not oldest then return false, "Паст нет (все в ЧС или удалены)" end
+
+    -- 2. Валидация пасты (проверка на 404 перед телепортом)
+    local checkReq = request({
+        Url = "https://pastefy.app/api/v2/paste/" .. oldest.id,
+        Method = "GET",
+        Headers = headers
+    })
+
+    if checkReq.StatusCode == 404 then
+        warn("🚫 Обнаружена призрачная паста: " .. oldest.id .. ". Пропускаю.")
+        blacklistedPastes[oldest.id] = true
+        return false, "Пропуск призрака"
+    end
+
+    -- 3. Разбор контента
     local content = oldest.content or ""
     local lines = {}
-    for line in content:gmatch("[^\r\n]+") do
-        table.insert(lines, line)
-    end
+    for line in content:gmatch("[^\r\n]+") do table.insert(lines, line) end
 
-    local jobId = lines[1] -- первая строка
+    local jobId = lines[1]
     local gameid = lines[2]
-    local playerName = lines[3] -- вторая строка
+    local playerName = lines[3]
 
-    if not jobId or not gameid then
-        warn("⚠️ JobId or gameid в пасте не найден, содержимое:\n" .. content)
-        return false, "joid - nil"
+    if not jobId or not gameid or jobId == "" or gameid == "" then
+        warn("⚠️ Паста " .. oldest.id .. " повреждена. Удаляю.")
+        deletePaste(oldest.id)
+        blacklistedPastes[oldest.id] = true
+        return false, "Битая паста удалена"
     end
 
-    -- Сохраняем глобальные переменные
+    -- Подготовка к телепорту
     getgenv().name = playerName or ""
     getgenv().paste = oldest.id
+    isProcessing = true 
 
-    local codeUrl = "https://raw.githubusercontent.com/Roma77799/testik/refs/heads/main/test2"
-    queueCode = string.format([[ 
+    local queueCode = string.format([[ 
         getgenv().name = "%s"
         getgenv().paste = "%s"
         spawn(function()
             repeat task.wait() until game:IsLoaded()
             local success, err = pcall(function()
-                local code
-                if game.HttpGetAsync then
-                    code = game:HttpGetAsync("%s")
-                else
-                    code = game:HttpGet("%s")
-                end
+                local code = game:HttpGet("%s")
                 if not code or code == "" then error("Failed to fetch script") end
-                if code:sub(1,1) == "<" then error("Получен HTML вместо Lua") end
                 local func, compileErr = loadstring(code)
                 if not func then error("Ошибка компиляции: "..tostring(compileErr)) end
                 func()
             end)
-            if not success then warn("Ошибка при выполнении скрипта после телепорта:", err) end
+            if not success then warn("Ошибка после телепорта:", err) end
         end)
-    ]], getgenv().name, getgenv().paste, codeUrl, codeUrl)
+    ]], getgenv().name, getgenv().paste, codeUrl)
 
-    -- Телепортация
-    game:GetService("TeleportService"):TeleportToPlaceInstance(gameid, jobId)
+    if queueteleport then queueteleport(queueCode) end
+
+    print("🚀 Попытка телепорта: " .. jobId)
+    TeleportService:TeleportToPlaceInstance(tonumber(gameid) or gameid, jobId)
+    
+    return true 
 end
-game.Players.LocalPlayer.OnTeleport:Connect(function()
-    if queueteleport then
-        queueteleport(queueCode)
-    else
-        print("queue нету")
-    end
-end)
---// Основной цикл с безопасными интервалами
+
+print("Скрипт запущен (с защитой от кэша и 404)...")
+
 while true do
-    local ok, suc, msg = pcall(getOldestPaste)
+    local ok, result, msg = pcall(getOldestPaste)
+    
     if not ok then
-        warn("⚠️ Lua ошибка:", suc) 
-        -- если ошибка таймаута или сети, ждем дольше
-        if tostring(suc):find("HttpError: Timedout") then
-            task.wait(10)
-        else
-            task.wait(5)
+        local errorText = tostring(result)
+        warn("⚠️ Ошибка выполнения:", errorText)
+        task.wait(errorText:find("Timedout") and 15 or 6)
+
+    elseif result == false then
+        if msg ~= "Паст нет" then 
+            warn("Статус:", msg) 
         end
-    elseif not suc then
-        warn("⚠️ Ошибка в getOldestPaste:", msg)
-        task.wait(5)
+        
+        -- Если Pastefy выдает ошибки 5xx, ждем дольше
+        if tostring(msg):find("503") or tostring(msg):find("504") then
+            task.wait(15)
+        else
+            task.wait(6)
+        end
     else
-        -- после успешного запроса ждем чуть дольше, чтобы не попасть под rate-limit
-        task.wait(5)
+        task.wait(6)
     end
 end

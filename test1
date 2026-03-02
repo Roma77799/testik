@@ -49,15 +49,16 @@ end
 --// Функция удаления пасты
 local function deletePaste(pasteId)
     if not pasteId or pasteId == "" or pasteId == lastDeletedId then return false end
-    
-    local response = request{{
-        Url = "https://pastefy.app/api/v2/paste/" .. pasteId,
-        Method = "DELETE",
-        Headers = {
-            ["Authorization"] = "Bearer " .. apiKey,
-            ["Accept"] = "application/json"
-        }
-    }}
+    local response = pcall(function()
+        return request({
+            Url = "https://pastefy.app/api/v2/paste/" .. pasteId,
+            Method = "DELETE",
+            Headers = {
+                ["Authorization"] = "Bearer " .. apiKey,
+                ["Accept"] = "application/json"
+            }
+        })
+    end)
     
     lastDeletedId = pasteId -- Сразу помечаем как удаленную в памяти
     

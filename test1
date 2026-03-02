@@ -46,11 +46,14 @@ local function parseDateTime(dateStr)
     return 0
 end
 
+--// Функция удаления пасты (ИСПРАВЛЕННАЯ)
 local function deletePaste(pasteId)
     if not pasteId or pasteId == "" or pasteId == lastDeletedId then return false end
     
-    -- Исправлено: Одинарные скобки и pcall для стабильности
+    print("🗑️ Попытка удаления пасты:", pasteId)
+    
     local success, response = pcall(function()
+        -- Используем ОДИНАРНЫЕ скобки
         return request({
             Url = "https://pastefy.app/api/v2/paste/" .. pasteId,
             Method = "DELETE",
@@ -63,22 +66,23 @@ local function deletePaste(pasteId)
     
     lastDeletedId = pasteId 
     
-    if not success or not response then 
-        warn("❌ Ошибка выполнения запроса удаления")
+    -- Проверяем, что запрос вообще прошел и вернул таблицу, а не boolean/nil
+    if not success or type(response) ~= "table" then 
+        warn("❌ Ошибка сети или девайса при удалении. Ответ:", tostring(response))
         return false 
     end
 
-    if response.StatusCode == 404 then
-        warn("❌ Паста уже удалена (404):", pasteId)
-        return true 
-    end
-
+    -- Теперь безопасно проверяем StatusCode
     if response.StatusCode == 200 or response.StatusCode == 204 then
-        print("✅ Паста успешно удалена с Pastefy")
+        print("✅ Паста успешно удалена")
         return true
+    elseif response.StatusCode == 404 then
+        warn("⚠️ Паста уже была удалена ранее (404)")
+        return true
+    else
+        warn("❌ API вернуло ошибку:", response.StatusCode)
+        return false
     end
-
-    return false, "Status: " .. tostring(response.StatusCode)
 end
 
 --// Обработка ошибок телепорта

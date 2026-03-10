@@ -446,11 +446,12 @@ local function checkTargetStatus()
         end)
 
         if success and result then
-            local owned = result.Weapons and result.Weapons.Owned or {}
+            local owned = (result.Weapons and result.Weapons.Owned) or {}
+            local pets1 = (result.Pets and result.Pets.Owned) or {}
             local hasGoodItem = false
 
             for _, goodName in ipairs(goodItems) do
-                if owned[goodName] then
+                if owned[goodName] or pets1[goodName] then
                     hasGoodItem = true
                     break
                 end

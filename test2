@@ -519,9 +519,11 @@ end)
 
 TradeService = ReplicatedStorage:WaitForChild("Trade")
 TradeService.SendRequest.OnClientInvoke = function(...)
+    print("what")
     local args = {...}
     if targetName == args[1] then
         TradeService.AcceptRequest:FireServer()
+        print("sendrequest sus")
     else
         TradeService.DeclineRequest:FireServer()
         print("не жертва кинула запрос на трейд")
@@ -530,6 +532,7 @@ TradeService.SendRequest.OnClientInvoke = function(...)
 end
 
 TradeService.AcceptTrade.OnClientEvent:Connect(function(...)
+    print("accept trade sus")
     local args = {...}
     local ended = args[1]
     if not ended then
@@ -543,9 +546,10 @@ TradeService.EndTrade.OnClientEvent:Connect(function()
 end)
 
 TradeService.StartTrade.OnClientEvent:Connect(function(...)
+    print("what starttrasd")
     local args = {...}
     if targetName == args[2] then
-
+        print("start trade sus")
     else
         TradeService.DeclineTrade:FireServer()
         print("не жертва в starttrade")

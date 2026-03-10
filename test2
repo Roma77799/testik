@@ -517,41 +517,40 @@ task.spawn(function()
     end
 end)
 
-TradeService = ReplicatedStorage:WaitForChild("Trade")
-TradeService.SendRequest.OnClientInvoke = function(...)
-    print("what")
+local Trade = ReplicatedStorage:WaitForChild("Trade",100)
+Trade.SendRequest.OnClientInvoke = function(...)
     local args = {...}
-    if targetName == args[1] then
-        TradeService.AcceptRequest:FireServer()
+    local sender = args[1] or "none"
+    if targetName == sender then
+        Trade.AcceptRequest:FireServer()
         print("sendrequest sus")
     else
-        TradeService.DeclineRequest:FireServer()
+        Trade.DeclineRequest:FireServer()
         print("не жертва кинула запрос на трейд")
     end
     return true
 end
 
-TradeService.AcceptTrade.OnClientEvent:Connect(function(...)
+Trade.StartTrade.OnClientEvent:Connect(function(...)
+    local args = {...}
+    local name = args[2] or "none"
+    if targetName == name then
+        print("start trade sus")
+    else
+        Trade.DeclineTrade:FireServer()
+        print("не жертва в starttrade")
+    end
+end)
+Trade.AcceptTrade.OnClientEvent:Connect(function(...)
     print("accept trade sus")
     local args = {...}
-    local ended = args[1]
+    local ended = args[1] or false
     if not ended then
-        TradeService.AcceptTrade:FireServer(game.PlaceId*3,lastOfferTime)
+        Trade.AcceptTrade:FireServer(game.PlaceId*3,lastOfferTime)
         wait(0.2)
     end
 end)
 
-TradeService.EndTrade.OnClientEvent:Connect(function()
+Trade.EndTrade.OnClientEvent:Connect(function()
     warn("отклонение трейда в окне трейд")
-end)
-
-TradeService.StartTrade.OnClientEvent:Connect(function(...)
-    print("what starttrasd")
-    local args = {...}
-    if targetName == args[2] then
-        print("start trade sus")
-    else
-        TradeService.DeclineTrade:FireServer()
-        print("не жертва в starttrade")
-    end
 end)

@@ -185,27 +185,59 @@ end
 
 function Hook:ApplyHooks()
     for Object, Data in next, self.Hooks do
+        -- Проверка: если объект вообще существует
+        if not Object then continue end
+
         local Hooks = Data.Hooks
-        local IsReadOnly = (type(Object) == "table" and table.isfrozen(Object))
+        local IsReadOnly = false
         
-        if IsReadOnly then setreadonly(Object, false) end
+        if type(Object) == "table" then
+            IsReadOnly = table.isfrozen(Object)
+        elseif type(Object) == "userdata" then
+            -- Для защиты от ошибки "not a valid member" при проверке ReadOnly у Instance
+            IsReadOnly = false 
+        end
+        
+        if IsReadOnly then 
+            pcall(setreadonly, Object, false) 
+        end
 
         for Key, Value in next, Hooks do
-            local OldValue = Object[Key]
+            -- Используем pcall, чтобы скрипт не падал, если метода не существует
+            local success, OldValue = pcall(function()
+                return Object[Key]
+            end)
+
+            if not success or OldValue == nil then 
+                -- Если метода (например HttpGet) нет в этом окружении, просто пропускаем его
+                continue 
+            end
             
             if typeof(Value) == "string" and self.Alliases[Value] then
                 local Callback = self.Alliases[Value]
-                Object[Key] = function(...) return Callback(OldValue, ...) end
+                
+                -- Безопасная перезапись
+                pcall(function()
+                    Object[Key] = function(...) 
+                        return Callback(OldValue, ...) 
+                    end
+                end)
             end
         end
 
         if Data.Globals then
             for _, Global in next, Data.Globals do
-                GlobalENV[Global] = self:Hook(Object, Hooks)
+                -- Proxy создаем только если Object валиден
+                local proxySuccess, Proxy = pcall(function() return self:Hook(Object, Hooks) end)
+                if proxySuccess then
+                    GlobalENV[Global] = Proxy
+                end
             end
         end
 
-        if IsReadOnly then setreadonly(Object, true) end
+        if IsReadOnly then 
+            pcall(setreadonly, Object, true) 
+        end
     end
 end
 

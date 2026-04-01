@@ -197,6 +197,11 @@ local isCollapsed           = false
 local isDraggingScrollThumb = false
 local scrollThumbDragStart
 local scrollThumbStartY     = 0
+local scrollActiveInput
+local dragActiveInput
+local resizeActiveInput
+local ws
+local wsConnected           = false
 
 local pendingBubbles = {}
 
@@ -476,8 +481,9 @@ messageList:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(updateScrollT
 chatWindow:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateScrollThumb)
 
 scrollThumb.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         isDraggingScrollThumb = true
+        scrollActiveInput     = input
         scrollThumbDragStart  = input.Position
         scrollThumbStartY     = scrollThumb.Position.Y.Offset
         resetActivityTimer()
@@ -485,7 +491,7 @@ scrollThumb.InputBegan:Connect(function(input)
 end)
 
 scrollTrack.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         setScrollFromThumb(input.Position.Y - scrollTrack.AbsolutePosition.Y - (scrollThumb.AbsoluteSize.Y / 2))
         resetActivityTimer()
     end
@@ -521,8 +527,9 @@ resizeImage.Parent = resizeHandle
 local isResizing = false
 
 resizeHandle.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         isResizing = true
+        resizeActiveInput = input
         TweenService:Create(resizeImage, TweenInfo.new(0.1), { ImageTransparency = 0.35 }):Play()
         resetActivityTimer()
     end
@@ -543,14 +550,15 @@ resizeHandle.MouseLeave:Connect(function()
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if isDraggingScrollThumb and input.UserInputType == Enum.UserInputType.MouseMovement then
+    local isMoveEvent = input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch
+    if isDraggingScrollThumb and input == scrollActiveInput and isMoveEvent then
         setScrollFromThumb(scrollThumbStartY + (input.Position.Y - scrollThumbDragStart.Y))
         resetActivityTimer()
     end
-    if input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-    if isResizing then
+    if isResizing and input == resizeActiveInput and isMoveEvent then
         resetActivityTimer()
-        local mousePos = UserInputService:GetMouseLocation()
+        local mousePos = input.Position
         local viewport = workspace.CurrentCamera.ViewportSize
         local winPos   = chatWindow.AbsolutePosition
         chatWindow.Size = UDim2.new(0,
@@ -564,11 +572,13 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         if isResizing then
             TweenService:Create(resizeImage, TweenInfo.new(0.17), { ImageTransparency = 1 }):Play()
         end
         isDraggingScrollThumb = false
+        scrollActiveInput = nil
+        resizeActiveInput = nil
         isResizing = false
     end
 end)
@@ -617,18 +627,20 @@ local dragStart
 local dragWindowStart
 
 chatWindow.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and not isResizing and not isDraggingScrollThumb then
+    if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
+    and not isResizing and not isDraggingScrollThumb then
         dragging = true
-        dragStart = UserInputService:GetMouseLocation()
+        dragActiveInput = input
+        dragStart = input.Position
         dragWindowStart = chatWindow.AbsolutePosition
         resetActivityTimer()
     end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if not (dragging and input.UserInputType == Enum.UserInputType.MouseMovement) then return end
-    local mousePos = UserInputService:GetMouseLocation()
-    local delta    = mousePos - dragStart
+    if not (dragging and input == dragActiveInput
+    and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch)) then return end
+    local delta    = input.Position - dragStart
     local viewport = workspace.CurrentCamera.ViewportSize
     local winSize  = chatWindow.AbsoluteSize
     chatWindow.AnchorPoint = Vector2.new(0, 0)
@@ -639,12 +651,13 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         if dragging then
             lastPosition = chatWindow.Position
             lastAnchor   = chatWindow.AnchorPoint
         end
         dragging   = false
+        dragActiveInput = nil
         isResizing = false
         isDraggingScrollThumb = false
     end
@@ -652,8 +665,6 @@ end)
 -- ============================================================
 -- WEBSOCKET — связь с ChatService
 -- ============================================================
-local ws
-local wsConnected = false
 
 local function getOrBuildOtherBubbleGui(hrp, ownerName)
     local guiName = "CustomBubbleGui_" .. ownerName

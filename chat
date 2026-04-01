@@ -553,11 +553,13 @@ end)
 UserInputService.InputChanged:Connect(function(input)
     local isMoveEvent = input.UserInputType == Enum.UserInputType.MouseMovement
         or input.UserInputType == Enum.UserInputType.Touch
-    if isDraggingScrollThumb and input == scrollActiveInput and isMoveEvent then
+    if isDraggingScrollThumb and isMoveEvent
+    and (input.UserInputType == Enum.UserInputType.MouseMovement or input == scrollActiveInput) then
         setScrollFromThumb(scrollThumbStartY + (input.Position.Y - scrollThumbDragStart.Y))
         resetActivityTimer()
     end
-    if isResizing and input == resizeActiveInput and isMoveEvent then
+    if isResizing and isMoveEvent
+    and (input.UserInputType == Enum.UserInputType.MouseMovement or input == resizeActiveInput) then
         resetActivityTimer()
         local mousePos = input.Position
         local viewport = workspace.CurrentCamera.ViewportSize
@@ -639,8 +641,11 @@ chatWindow.InputBegan:Connect(function(input)
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if not (dragging and input == dragActiveInput
-    and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch)) then return end
+    local isDragMove = dragging and (
+        input.UserInputType == Enum.UserInputType.MouseMovement
+        or (input.UserInputType == Enum.UserInputType.Touch and input == dragActiveInput)
+    )
+    if not isDragMove then return end
     local delta    = input.Position - dragStart
     local viewport = workspace.CurrentCamera.ViewportSize
     local winSize  = chatWindow.AbsoluteSize

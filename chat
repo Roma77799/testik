@@ -202,157 +202,8 @@ local dragActiveInput
 local resizeActiveInput
 local ws
 local wsConnected           = false
+local myColorHex            = "#FFFFFF"
 
-local pendingBubbles = {}
-
-local function rebuildBubbleGui()
-    local character = player.Character
-    if not character then return nil end
-    local head = character:FindFirstChild("Head")
-    if not head then return nil end
-
-    local old = head:FindFirstChild("CustomBubbleGui")
-    if old then old:Destroy() end
-
-    local bGui = Instance.new("BillboardGui")
-    bGui.Name = "CustomBubbleGui"
-    bGui.Adornee = head
-    bGui.AlwaysOnTop = true
-    bGui.LightInfluence = 0
-    bGui.Size = UDim2.new(0, 240, 0, 300)
-    bGui.StudsOffset = Vector3.new(0, 2.5, 0)
-    bGui.ResetOnSpawn = false
-    bGui.Parent = head
-
-    local container = Instance.new("Frame")
-    container.Name = "Stack"
-    container.AnchorPoint = Vector2.new(0, 1)
-    container.Size = UDim2.new(1, 0, 1, 0)
-    container.Position = UDim2.new(0, 0, 1, 0)
-    container.BackgroundTransparency = 1
-    container.ClipsDescendants = false
-    container.Parent = bGui
-
-    local layout = Instance.new("UIListLayout")
-    layout.VerticalAlignment   = Enum.VerticalAlignment.Bottom
-    layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-    layout.SortOrder     = Enum.SortOrder.LayoutOrder
-    layout.FillDirection = Enum.FillDirection.Vertical
-    layout.Padding       = UDim.new(0, 5)
-    layout.Parent = container
-
-    return bGui
-end
-
-
-local function getOrCreateBubbleGui()
-    local character = player.Character
-    if not character then return nil end
-    local head = character:FindFirstChild("Head")
-    if not head then return nil end
-    local bGui = head:FindFirstChild("CustomBubbleGui")
-    if not bGui then bGui = rebuildBubbleGui() end
-    return bGui
-end
-
-local function spawnBubbleFrame(stack, text, remainingTime)
-    local msgFrame = Instance.new("Frame")
-    msgFrame.BackgroundColor3 = Color3.fromRGB(25, 27, 29)
-    msgFrame.BackgroundTransparency = 0.3
-    msgFrame.AutomaticSize = Enum.AutomaticSize.XY
-    msgFrame.Parent = stack
-    Instance.new("UICorner", msgFrame).CornerRadius = UDim.new(0, 8)
-
-    -- ограничение на фрейм, а не на лейбл — фикс бага с пропадающим текстом
-    local constraint = Instance.new("UISizeConstraint")
-    constraint.MaxSize = Vector2.new(220, 9999)
-    constraint.Parent = msgFrame
-
-    local bPadding = Instance.new("UIPadding")
-    bPadding.PaddingLeft   = UDim.new(0, 10)
-    bPadding.PaddingRight  = UDim.new(0, 10)
-    bPadding.PaddingTop    = UDim.new(0, 6)
-    bPadding.PaddingBottom = UDim.new(0, 6)
-    bPadding.Parent = msgFrame
-
-    local bLabel = Instance.new("TextLabel")
-    bLabel.Size = UDim2.new(1, 0, 0, 0)  -- ширина от родителя, высота авто
-    bLabel.AutomaticSize = Enum.AutomaticSize.Y
-    bLabel.BackgroundTransparency = 1
-    bLabel.Text = text
-    bLabel.TextColor3 = Color3.new(1, 1, 1)
-    bLabel.Font = Enum.Font.GothamMedium
-    bLabel.TextSize = 14
-    bLabel.RichText = true
-    bLabel.TextWrapped = true
-    bLabel.Parent = msgFrame
-
-    task.spawn(function()
-        task.wait(remainingTime)
-        if not msgFrame or not msgFrame.Parent then return end
-        local tInfo = TweenInfo.new(0.5)
-        TweenService:Create(msgFrame, tInfo, { BackgroundTransparency = 1 }):Play()
-        TweenService:Create(bLabel,   tInfo, { TextTransparency = 1 }):Play()
-        task.wait(0.5)
-        if msgFrame and msgFrame.Parent then msgFrame:Destroy() end
-    end)
-end
-
-local function createBubble(text)
-    local bGui = getOrCreateBubbleGui()
-    if not bGui then return end
-    local stack = bGui:FindFirstChild("Stack")
-    if not stack then return end
-
-    local removeAt = tick() + 25
-    table.insert(pendingBubbles, { text = text, removeAt = removeAt })
-
-    spawnBubbleFrame(stack, text, 25)
-
-    task.delay(25.5, function()
-        local now = tick()
-        for i = #pendingBubbles, 1, -1 do
-            if pendingBubbles[i].removeAt <= now then
-                table.remove(pendingBubbles, i)
-            end
-        end
-    end)
-end
-local function onCharacterAdded(character)
-    local head = character:WaitForChild("Head", 10)
-    if not head then return end
-    task.wait(0.15)
-
-    local now = tick()
-    for i = #pendingBubbles, 1, -1 do
-        if pendingBubbles[i].removeAt <= now then
-            table.remove(pendingBubbles, i)
-        end
-    end
-
-    if #pendingBubbles == 0 then return end
-
-    local bGui = rebuildBubbleGui()
-    if not bGui then return end
-    local stack = bGui:FindFirstChild("Stack")
-    if not stack then return end
-
-    for _, bubble in ipairs(pendingBubbles) do
-        local remaining = bubble.removeAt - now
-        if remaining > 0 then
-            spawnBubbleFrame(stack, bubble.text, remaining)
-        end
-    end
-end
-
-player.CharacterAdded:Connect(onCharacterAdded)
-if player.Character then
-    task.spawn(function() onCharacterAdded(player.Character) end)
-end
-
--- ============================================================
--- СООБЩЕНИЯ В ОКНЕ
--- ============================================================
 local function updateScrollThumb()
     local canvasHeight = messageList.AbsoluteCanvasSize.Y
     local viewHeight   = messageList.AbsoluteWindowSize.Y
@@ -415,18 +266,22 @@ local function resetActivityTimer()
     end
 end
 
-local function addMessage(sender, text, color)
+local function addMessage(sender, text, labelColor, nameHex)
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, 0, 0, 0)
     label.AutomaticSize = Enum.AutomaticSize.Y
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.Gotham
     label.TextSize = 14
-    label.TextColor3 = color or Color3.new(1, 1, 1)
+    label.TextColor3 = labelColor or Color3.new(1, 1, 1)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.RichText = true
     label.TextWrapped = true
-    label.Text = "<b>" .. sender .. ":</b> " .. text
+    if nameHex then
+        label.Text = "<b><font color='" .. nameHex .. "'>" .. sender .. "</font>:</b> " .. text
+    else
+        label.Text = "<b>" .. sender .. ":</b> " .. text
+    end
     label.Parent = messageList
     task.wait()
     messageList.CanvasPosition = Vector2.new(0, messageList.AbsoluteCanvasSize.Y)
@@ -436,8 +291,7 @@ end
 local function onSend()
     local text = chatInput.Text
     if text == "" or text:match("^%s*$") then return end
-    addMessage(player.Name, text)
-    createBubble(text)
+    addMessage(player.Name, text, nil, myColorHex)
     chatInput.Text = ""
     if wsConnected and ws then
         pcall(function()
@@ -666,44 +520,6 @@ UserInputService.InputEnded:Connect(function(input)
         isDraggingScrollThumb = false
     end
 end)
--- ============================================================
--- WEBSOCKET — связь с ChatService
--- ============================================================
-
-local function getOrBuildOtherBubbleGui(head, ownerName)
-    local guiName = "CustomBubbleGui_" .. ownerName
-    local bGui = head:FindFirstChild(guiName)
-    if bGui then return bGui end
-
-    bGui = Instance.new("BillboardGui")
-    bGui.Name = guiName
-    bGui.Adornee = head
-    bGui.AlwaysOnTop = true
-    bGui.LightInfluence = 0
-    bGui.Size = UDim2.new(0, 240, 0, 300)
-    bGui.StudsOffset = Vector3.new(0, 2.5, 0)
-    bGui.ResetOnSpawn = false
-    bGui.Parent = head
-
-    local container = Instance.new("Frame")
-    container.Name = "Stack"
-    container.AnchorPoint = Vector2.new(0, 1)
-    container.Size = UDim2.new(1, 0, 1, 0)
-    container.Position = UDim2.new(0, 0, 1, 0)
-    container.BackgroundTransparency = 1
-    container.ClipsDescendants = false
-    container.Parent = bGui
-
-    local layout = Instance.new("UIListLayout")
-    layout.VerticalAlignment   = Enum.VerticalAlignment.Bottom
-    layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-    layout.SortOrder     = Enum.SortOrder.LayoutOrder
-    layout.FillDirection = Enum.FillDirection.Vertical
-    layout.Padding       = UDim.new(0, 5)
-    layout.Parent = container
-
-    return bGui
-end
 
 local function wsConnect()
     local ok, result = pcall(function()
@@ -728,27 +544,21 @@ local function wsConnect()
         local ok2, data = pcall(HttpService.JSONDecode, HttpService, raw)
         if not ok2 or type(data) ~= "table" then return end
 
+        if data.type == "color_assign" then
+            myColorHex = tostring(data.color or "#FFFFFF")
+            return
+        end
+
         if data.type == "spam_warn" then
             local remaining = tonumber(data.remaining) or 60
-            addMessage("System", "Too many request. Wait " .. remaining .. " sec.", Color3.fromRGB(255, 80, 80))
+            addMessage("⚠ System", "Too many request. Wait " .. remaining .. " sec.", Color3.fromRGB(255, 80, 80))
             return
         end
 
         if data.type ~= "chat" then return end
         if type(data.name) ~= "string" or type(data.text) ~= "string" then return end
 
-        addMessage(data.name, data.text)
-
-        local targetPlayer = Players:FindFirstChild(data.name)
-        if not targetPlayer or not targetPlayer.Character then return end
-        local head = targetPlayer.Character:FindFirstChild("Head")
-        if not head then return end
-
-        local bGui = getOrBuildOtherBubbleGui(head, data.name)
-        local stack = bGui and bGui:FindFirstChild("Stack")
-        if stack then
-            spawnBubbleFrame(stack, data.text, 8)
-        end
+        addMessage(data.name, data.text, nil, tostring(data.color or "#FFFFFF"))
     end)
 
     ws.OnClose:Connect(function()

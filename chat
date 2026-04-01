@@ -203,6 +203,17 @@ local resizeActiveInput
 local ws
 local wsConnected           = false
 local myColorHex            = "#FFFFFF"
+local hasUnread             = false
+
+local function updateChatIcon()
+    if chatWindow.Visible then
+        chatIconImage.Image = "rbxassetid://72618543563266"
+    elseif hasUnread then
+        chatIconImage.Image = "rbxassetid://86437531464293"
+    else
+        chatIconImage.Image = "rbxassetid://70376310988134"
+    end
+end
 
 local function updateScrollThumb()
     local canvasHeight = messageList.AbsoluteCanvasSize.Y
@@ -283,6 +294,10 @@ local function addMessage(sender, text, labelColor, nameHex)
         label.Text = "<b>" .. sender .. ":</b> " .. text
     end
     label.Parent = messageList
+    if not chatWindow.Visible then
+        hasUnread = true
+        updateChatIcon()
+    end
     task.wait()
     messageList.CanvasPosition = Vector2.new(0, messageList.AbsoluteCanvasSize.Y)
     updateScrollThumb()
@@ -444,7 +459,8 @@ local function openChat(shouldFocusInput)
     chatWindow.Position    = lastPosition
     chatWindow.Size        = lastSize
     chatWindow.Visible = true
-    chatIconImage.Image = "rbxassetid://72618543563266"
+    hasUnread = false
+    updateChatIcon()
     isCollapsed = false
     setContentTransparency(0)
     resetActivityTimer()
@@ -457,7 +473,7 @@ end
 
 local function closeChat()
     chatWindow.Visible = false
-    chatIconImage.Image = "rbxassetid://70376310988134"
+    updateChatIcon()
 end
 
 chatIcon.MouseButton1Click:Connect(function()
@@ -550,7 +566,7 @@ local function wsConnect()
         end
 
         if data.type == "self_join" then
-            addMessage("System", "You connected to SNPWARE CHAT!", Color3.fromRGB(100, 220, 255))
+            addMessage("System", "You connected to SNPWARE CHAT!", Color3.fromRGB(131, 255, 100))
             game:GetService("StarterGui"):SetCore("SendNotification", {
                 Title = "SNPWARE CHAT";
                 Text  = "You connected to the server!";
@@ -561,7 +577,7 @@ local function wsConnect()
 
         if data.type == "join" then
             local name = tostring(data.name or "?")
-            addMessage("System", name .. " connected to server!", Color3.fromRGB(100, 220, 255))
+            addMessage("System", name .. " connected to server!", Color3.fromRGB(136, 255, 100))
             game:GetService("StarterGui"):SetCore("SendNotification", {
                 Title = "SNPWARE CHAT";
                 Text  = name .. " connected to server!";

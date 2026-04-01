@@ -670,20 +670,20 @@ end)
 -- WEBSOCKET — связь с ChatService
 -- ============================================================
 
-local function getOrBuildOtherBubbleGui(hrp, ownerName)
+local function getOrBuildOtherBubbleGui(head, ownerName)
     local guiName = "CustomBubbleGui_" .. ownerName
-    local bGui = hrp:FindFirstChild(guiName)
+    local bGui = head:FindFirstChild(guiName)
     if bGui then return bGui end
 
     bGui = Instance.new("BillboardGui")
     bGui.Name = guiName
-    bGui.Adornee = hrp
+    bGui.Adornee = head
     bGui.AlwaysOnTop = true
     bGui.LightInfluence = 0
     bGui.Size = UDim2.new(0, 240, 0, 300)
     bGui.StudsOffset = Vector3.new(0, 2.5, 0)
     bGui.ResetOnSpawn = false
-    bGui.Parent = hrp
+    bGui.Parent = head
 
     local container = Instance.new("Frame")
     container.Name = "Stack"
@@ -741,10 +741,10 @@ local function wsConnect()
 
         local targetPlayer = Players:FindFirstChild(data.name)
         if not targetPlayer or not targetPlayer.Character then return end
-        local hrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
+        local head = targetPlayer.Character:FindFirstChild("Head")
+        if not head then return end
 
-        local bGui = getOrBuildOtherBubbleGui(hrp, data.name)
+        local bGui = getOrBuildOtherBubbleGui(head, data.name)
         local stack = bGui and bGui:FindFirstChild("Stack")
         if stack then
             spawnBubbleFrame(stack, data.text, 8)

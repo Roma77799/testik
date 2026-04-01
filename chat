@@ -208,23 +208,21 @@ local pendingBubbles = {}
 local function rebuildBubbleGui()
     local character = player.Character
     if not character then return nil end
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
+    local head = character:FindFirstChild("Head")
+    if not head then return nil end
 
-    local old = hrp:FindFirstChild("CustomBubbleGui")
+    local old = head:FindFirstChild("CustomBubbleGui")
     if old then old:Destroy() end
 
     local bGui = Instance.new("BillboardGui")
     bGui.Name = "CustomBubbleGui"
-    bGui.Adornee = hrp
+    bGui.Adornee = head
     bGui.AlwaysOnTop = true
     bGui.LightInfluence = 0
     bGui.Size = UDim2.new(0, 240, 0, 300)
-    -- StudsOffset = camera space: X всегда правее на экране, Y вверх, Z к камере
-    -- не зависит от поворота персонажа
-    bGui.StudsOffset = Vector3.new(4, 1.5, 0)
+    bGui.StudsOffset = Vector3.new(0, 2.5, 0)
     bGui.ResetOnSpawn = false
-    bGui.Parent = hrp
+    bGui.Parent = head
 
     local container = Instance.new("Frame")
     container.Name = "Stack"
@@ -250,9 +248,9 @@ end
 local function getOrCreateBubbleGui()
     local character = player.Character
     if not character then return nil end
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
-    local bGui = hrp:FindFirstChild("CustomBubbleGui")
+    local head = character:FindFirstChild("Head")
+    if not head then return nil end
+    local bGui = head:FindFirstChild("CustomBubbleGui")
     if not bGui then bGui = rebuildBubbleGui() end
     return bGui
 end
@@ -321,8 +319,8 @@ local function createBubble(text)
     end)
 end
 local function onCharacterAdded(character)
-    local hrp = character:WaitForChild("HumanoidRootPart", 10)
-    if not hrp then return end
+    local head = character:WaitForChild("Head", 10)
+    if not head then return end
     task.wait(0.15)
 
     local now = tick()
@@ -683,7 +681,7 @@ local function getOrBuildOtherBubbleGui(hrp, ownerName)
     bGui.AlwaysOnTop = true
     bGui.LightInfluence = 0
     bGui.Size = UDim2.new(0, 240, 0, 300)
-    bGui.StudsOffset = Vector3.new(4, 1.5, 0)
+    bGui.StudsOffset = Vector3.new(0, 2.5, 0)
     bGui.ResetOnSpawn = false
     bGui.Parent = hrp
 
@@ -763,30 +761,3 @@ end
 
 task.spawn(wsConnect)
 
-RunService.RenderStepped:Connect(function()
-    local character = player.Character
-    if not character then return end
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    local bGui = hrp:FindFirstChild("CustomBubbleGui")
-    if not bGui then return end
-
-    local camera = workspace.CurrentCamera
-
-    -- берём экранную позицию самого hrp
-    local hrpScreen, onScreen = camera:WorldToScreenPoint(hrp.Position)
-    if not onScreen then return end
-
-    -- хотим чтобы bubble был правее на фиксированные 160 пикселей
-    local targetScreenX = hrpScreen.X + 160
-    local targetScreenY = hrpScreen.Y
-
-    -- переводим обратно в 3D на той же глубине
-    local targetWorld = camera:ScreenPointToRay(targetScreenX, targetScreenY).Origin
-        + camera:ScreenPointToRay(targetScreenX, targetScreenY).Direction * (hrpScreen.Z)
-
-    -- считаем разницу в world space относительно hrp
-    local offset = hrp.CFrame:PointToObjectSpace(targetWorld)
-
-    bGui.StudsOffset = Vector3.new(offset.X, 1.5, offset.Z)
-end)

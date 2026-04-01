@@ -108,6 +108,15 @@ closeButton.Position = UDim2.new(1, -28, 0, 6)
 closeButton.BackgroundTransparency = 1
 closeButton.Parent = chatWindow
 
+local serverListBtn = Instance.new("ImageButton")
+serverListBtn.Name = "ServerListBtn"
+serverListBtn.Image = "rbxassetid://117293331356936"
+serverListBtn.Size = UDim2.new(0, 22, 0, 22)
+serverListBtn.Position = UDim2.new(1, -52, 0, 6)
+serverListBtn.BackgroundTransparency = 1
+serverListBtn.AutoButtonColor = false
+serverListBtn.Parent = chatWindow
+
 local messageList = Instance.new("ScrollingFrame")
 messageList.Size = UDim2.new(1, -16, 1, -86)
 messageList.Position = UDim2.new(0, 8, 0, 34)
@@ -204,6 +213,16 @@ local ws
 local wsConnected           = false
 local myColorHex            = "#FFFFFF"
 local hasUnread             = false
+local serverListVisible     = false
+local serverListLastSize    = UDim2.fromOffset(360, 300)
+local serverListLastPos     = UDim2.new(0.5, 50, 0.5, 50)
+local serverListLastAnchor  = Vector2.new(0.5, 0.5)
+local serverListResizing    = false
+local serverListResizeActiveInput
+local serverListDragging    = false
+local serverListDragActiveInput
+local serverListDragStart
+local serverListDragWindowStart
 
 local function updateChatIcon()
     if chatWindow.Visible then
@@ -537,6 +556,276 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
+-- ── Server List Window ────────────────────────────────────────────────────────
+local serverListWindow = Instance.new("Frame")
+serverListWindow.Name = "ServerListWindow"
+serverListWindow.BackgroundColor3 = Color3.fromRGB(25, 27, 29)
+serverListWindow.BackgroundTransparency = 0.3
+serverListWindow.BorderSizePixel = 0
+serverListWindow.Visible = false
+serverListWindow.Active = true
+serverListWindow.ClipsDescendants = false
+serverListWindow.Parent = screenGui
+Instance.new("UICorner", serverListWindow).CornerRadius = UDim.new(0, 15)
+
+local slHeader = Instance.new("TextLabel")
+slHeader.Size = UDim2.new(1, -52, 0, 30)
+slHeader.Position = UDim2.new(0, 8, 0, 4)
+slHeader.BackgroundTransparency = 1
+slHeader.Text = "SERVER LIST"
+slHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
+slHeader.TextSize = 13
+slHeader.Font = Enum.Font.GothamBold
+slHeader.TextXAlignment = Enum.TextXAlignment.Left
+slHeader.Parent = serverListWindow
+
+local slCloseBtn = Instance.new("ImageButton")
+slCloseBtn.Image = "rbxassetid://102770163148417"
+slCloseBtn.Size = UDim2.new(0, 22, 0, 22)
+slCloseBtn.Position = UDim2.new(1, -28, 0, 6)
+slCloseBtn.BackgroundTransparency = 1
+slCloseBtn.Parent = serverListWindow
+
+local slDivider = Instance.new("Frame")
+slDivider.Size = UDim2.new(1, -16, 0, 1)
+slDivider.Position = UDim2.new(0, 8, 0, 34)
+slDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+slDivider.BackgroundTransparency = 0.85
+slDivider.BorderSizePixel = 0
+slDivider.Parent = serverListWindow
+
+local slScrollFrame = Instance.new("ScrollingFrame")
+slScrollFrame.Size = UDim2.new(1, -16, 1, -44)
+slScrollFrame.Position = UDim2.new(0, 8, 0, 42)
+slScrollFrame.BackgroundTransparency = 1
+slScrollFrame.BorderSizePixel = 0
+slScrollFrame.ScrollBarThickness = 0
+slScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+slScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+slScrollFrame.Parent = serverListWindow
+
+local slListLayout = Instance.new("UIListLayout")
+slListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+slListLayout.Padding = UDim.new(0, 4)
+slListLayout.Parent = slScrollFrame
+
+local slResizeHandle = Instance.new("Frame")
+slResizeHandle.Size = UDim2.new(0, 32, 0, 32)
+slResizeHandle.Position = UDim2.new(1, 0, 1, 0)
+slResizeHandle.AnchorPoint = Vector2.new(0.5, 0.5)
+slResizeHandle.BackgroundTransparency = 1
+slResizeHandle.ZIndex = 99
+slResizeHandle.Active = true
+slResizeHandle.Parent = serverListWindow
+
+local slResizeImage = Instance.new("ImageLabel")
+slResizeImage.Size = UDim2.new(0, 96, 0, 96)
+slResizeImage.BackgroundTransparency = 1
+slResizeImage.Image = "rbxassetid://120997033468887"
+slResizeImage.Position = UDim2.new(0.5, -16, 0.5, -16)
+slResizeImage.AnchorPoint = Vector2.new(0.5, 0.5)
+slResizeImage.ImageTransparency = 1
+slResizeImage.Parent = slResizeHandle
+
+local function updateServerListUI(serverData)
+    for _, child in ipairs(slScrollFrame:GetChildren()) do
+        if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end
+    end
+    if type(serverData) ~= "table" then return end
+    local myJobId = tostring(getgenv().haha or "")
+    for i, entry in ipairs(serverData) do
+        local jobId = tostring(entry.jobId or "")
+        local count = tonumber(entry.count) or 0
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 40)
+        row.BackgroundColor3 = Color3.fromRGB(35, 37, 40)
+        row.BackgroundTransparency = 0.5
+        row.BorderSizePixel = 0
+        row.LayoutOrder = i
+        row.Parent = slScrollFrame
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+        local indexLabel = Instance.new("TextLabel")
+        indexLabel.Size = UDim2.new(0, 24, 1, 0)
+        indexLabel.Position = UDim2.new(0, 8, 0, 0)
+        indexLabel.BackgroundTransparency = 1
+        indexLabel.Text = tostring(i) .. "."
+        indexLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+        indexLabel.TextSize = 13
+        indexLabel.Font = Enum.Font.Gotham
+        indexLabel.TextXAlignment = Enum.TextXAlignment.Left
+        indexLabel.Parent = row
+        local countLabel = Instance.new("TextLabel")
+        countLabel.Size = UDim2.new(0, 52, 1, 0)
+        countLabel.Position = UDim2.new(0, 36, 0, 0)
+        countLabel.BackgroundTransparency = 1
+        countLabel.Text = count .. "/12"
+        countLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        countLabel.TextSize = 14
+        countLabel.Font = Enum.Font.GothamBold
+        countLabel.TextXAlignment = Enum.TextXAlignment.Left
+        countLabel.Parent = row
+        local infoLabel = Instance.new("TextLabel")
+        infoLabel.Size = UDim2.new(1, -188, 1, 0)
+        infoLabel.Position = UDim2.new(0, 94, 0, 0)
+        infoLabel.BackgroundTransparency = 1
+        infoLabel.Text = "snp chat clients"
+        infoLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
+        infoLabel.TextSize = 12
+        infoLabel.Font = Enum.Font.Gotham
+        infoLabel.TextXAlignment = Enum.TextXAlignment.Left
+        infoLabel.Parent = row
+        local isCurrentServer = (jobId == myJobId)
+        local joinBtn = Instance.new("TextButton")
+        joinBtn.Size = UDim2.new(0, 82, 0, 26)
+        joinBtn.Position = UDim2.new(1, -90, 0.5, 0)
+        joinBtn.AnchorPoint = Vector2.new(0, 0.5)
+        joinBtn.BackgroundColor3 = isCurrentServer and Color3.fromRGB(40, 80, 40) or Color3.fromRGB(40, 55, 70)
+        joinBtn.BackgroundTransparency = 0.2
+        joinBtn.Text = isCurrentServer and "current" or "join"
+        joinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        joinBtn.TextSize = 13
+        joinBtn.Font = Enum.Font.GothamBold
+        joinBtn.AutoButtonColor = not isCurrentServer
+        joinBtn.Parent = row
+        Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 6)
+        if not isCurrentServer then
+            local capturedJobId = jobId
+            joinBtn.MouseButton1Click:Connect(function()
+                pcall(function()
+                    game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, capturedJobId)
+                end)
+            end)
+        end
+    end
+    if #serverData == 0 then
+        local noLabel = Instance.new("TextLabel")
+        noLabel.Size = UDim2.new(1, 0, 0, 40)
+        noLabel.BackgroundTransparency = 1
+        noLabel.Text = "No active servers"
+        noLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
+        noLabel.TextSize = 13
+        noLabel.Font = Enum.Font.Gotham
+        noLabel.TextXAlignment = Enum.TextXAlignment.Center
+        noLabel.Parent = slScrollFrame
+    end
+end
+
+local function requestServerList()
+    if wsConnected and ws then
+        pcall(function()
+            ws:Send(HttpService:JSONEncode({ type = "get_servers" }))
+        end)
+    end
+end
+
+local function openServerList()
+    serverListVisible = true
+    serverListWindow.AnchorPoint = serverListLastAnchor
+    serverListWindow.Position    = serverListLastPos
+    serverListWindow.Size        = serverListLastSize
+    serverListWindow.Visible     = true
+    serverListBtn.Image = "rbxassetid://85034401017513"
+    requestServerList()
+end
+
+local function closeServerList()
+    serverListVisible = false
+    serverListWindow.Visible = false
+    serverListBtn.Image = "rbxassetid://117293331356936"
+end
+
+slCloseBtn.MouseButton1Click:Connect(closeServerList)
+serverListBtn.MouseButton1Click:Connect(function()
+    if serverListVisible then closeServerList() else openServerList() end
+end)
+
+serverListWindow.InputBegan:Connect(function(input)
+    if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
+    and not serverListResizing then
+        serverListDragging = true
+        serverListDragActiveInput = input
+        serverListDragStart = input.Position
+        serverListDragWindowStart = serverListWindow.AbsolutePosition
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if serverListDragging and (
+        input.UserInputType == Enum.UserInputType.MouseMovement
+        or (input.UserInputType == Enum.UserInputType.Touch and input == serverListDragActiveInput)
+    ) then
+        local d       = input.Position - serverListDragStart
+        local viewport = workspace.CurrentCamera.ViewportSize
+        local winSize  = serverListWindow.AbsoluteSize
+        serverListWindow.AnchorPoint = Vector2.new(0, 0)
+        serverListWindow.Position = UDim2.fromOffset(
+            math.clamp(serverListDragWindowStart.X + d.X, 0, viewport.X - winSize.X),
+            math.clamp(serverListDragWindowStart.Y + d.Y, 0, viewport.Y - winSize.Y)
+        )
+    end
+    if serverListResizing and (
+        input.UserInputType == Enum.UserInputType.MouseMovement
+        or (input.UserInputType == Enum.UserInputType.Touch and input == serverListResizeActiveInput)
+    ) then
+        local mousePos = input.Position
+        local viewport = workspace.CurrentCamera.ViewportSize
+        local winPos   = serverListWindow.AbsolutePosition
+        serverListWindow.Size = UDim2.new(0,
+            math.clamp(mousePos.X - winPos.X, 240, math.min(700, viewport.X - winPos.X)),
+            0,
+            math.clamp(mousePos.Y - winPos.Y, 140, math.min(600, viewport.Y - winPos.Y))
+        )
+        serverListLastSize = serverListWindow.Size
+    end
+end)
+
+slResizeHandle.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        serverListResizing = true
+        serverListResizeActiveInput = input
+        TweenService:Create(slResizeImage, TweenInfo.new(0.1), { ImageTransparency = 0.35 }):Play()
+    end
+end)
+
+slResizeHandle.MouseEnter:Connect(function()
+    TweenService:Create(slResizeImage, TweenInfo.new(0.3,
+        Enum.EasingStyle.Exponential, Enum.EasingDirection.Out),
+        { ImageTransparency = 0.8 }):Play()
+end)
+
+slResizeHandle.MouseLeave:Connect(function()
+    if not serverListResizing then
+        TweenService:Create(slResizeImage, TweenInfo.new(0.3,
+            Enum.EasingStyle.Exponential, Enum.EasingDirection.Out),
+            { ImageTransparency = 1 }):Play()
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if serverListDragging then
+            serverListLastPos    = serverListWindow.Position
+            serverListLastAnchor = serverListWindow.AnchorPoint
+        end
+        if serverListResizing then
+            TweenService:Create(slResizeImage, TweenInfo.new(0.17), { ImageTransparency = 1 }):Play()
+        end
+        serverListDragging = false
+        serverListDragActiveInput = nil
+        serverListResizing = false
+        serverListResizeActiveInput = nil
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(3)
+        if serverListVisible then
+            requestServerList()
+        end
+    end
+end)
+
 local function wsConnect()
     local ok, result = pcall(function()
         return WebSocket.connect("ws://92.246.139.177:1000")
@@ -600,6 +889,13 @@ local function wsConnect()
         if data.type == "spam_warn" then
             local remaining = tonumber(data.remaining) or 60
             addMessage("System", "Too many request. Wait " .. remaining .. " sec.", Color3.fromRGB(255, 80, 80))
+            return
+        end
+
+        if data.type == "server_list" then
+            if type(data.servers) == "table" then
+                updateServerListUI(data.servers)
+            end
             return
         end
 

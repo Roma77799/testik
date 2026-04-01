@@ -214,7 +214,7 @@ local wsConnected           = false
 local myColorHex            = "#FFFFFF"
 local hasUnread             = false
 local serverListVisible     = false
-local serverListLastSize    = UDim2.fromOffset(360, 300)
+local serverListLastSize    = UDim2.fromOffset(300, 220)
 local serverListLastPos     = UDim2.new(0.5, 50, 0.5, 50)
 local serverListLastAnchor  = Vector2.new(0.5, 0.5)
 local serverListResizing    = false
@@ -300,9 +300,16 @@ local function resetActivityTimer()
     end
 end
 
-local function addMessage(sender, text, labelColor, nameHex)
+local function addMessage(sender, text, labelColor, nameHex, skipScroll)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 0)
+    container.AutomaticSize = Enum.AutomaticSize.Y
+    container.BackgroundTransparency = 1
+    container.BorderSizePixel = 0
+    container.Parent = messageList
+
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 0, 0)
+    label.Size = UDim2.new(1, -22, 0, 0)
     label.AutomaticSize = Enum.AutomaticSize.Y
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.Gotham
@@ -316,14 +323,33 @@ local function addMessage(sender, text, labelColor, nameHex)
     else
         label.Text = "<b>" .. sender .. ":</b> " .. text
     end
-    label.Parent = messageList
+    label.Parent = container
+
+    local copyBtn = Instance.new("TextButton")
+    copyBtn.Size = UDim2.fromOffset(18, 18)
+    copyBtn.Position = UDim2.new(1, -20, 0, 1)
+    copyBtn.BackgroundTransparency = 1
+    copyBtn.Text = "📋"
+    copyBtn.TextSize = 13
+    copyBtn.Font = Enum.Font.GothamBold
+    copyBtn.TextColor3 = Color3.fromRGB(110, 110, 120)
+    copyBtn.AutoButtonColor = false
+    copyBtn.BorderSizePixel = 0
+    local copyText = sender .. ": " .. text
+    copyBtn.MouseButton1Click:Connect(function()
+        pcall(function() setclipboard(copyText) end)
+    end)
+    copyBtn.Parent = container
+
     if not chatWindow.Visible then
         hasUnread = true
         updateChatIcon()
     end
-    task.wait()
-    messageList.CanvasPosition = Vector2.new(0, messageList.AbsoluteCanvasSize.Y)
-    updateScrollThumb()
+    if not skipScroll then
+        task.wait()
+        messageList.CanvasPosition = Vector2.new(0, messageList.AbsoluteCanvasSize.Y)
+        updateScrollThumb()
+    end
 end
 
 local function onSend()
@@ -768,14 +794,14 @@ local function updateServerListUI(serverData)
         if maxAvatars > 0 and #clientList > 0 then
             local shown = math.min(#clientList, maxAvatars)
             local avatarStrip = Instance.new("Frame")
-            avatarStrip.Size = UDim2.fromOffset(shown * 24 + (shown - 1) * 3, 24)
+            avatarStrip.Size = UDim2.fromOffset(shown * 24 + (shown - 1) * 7, 24)
             avatarStrip.BackgroundTransparency = 1
             avatarStrip.LayoutOrder = 2
             avatarStrip.Parent = infoRow
             local avatarLayout = Instance.new("UIListLayout")
             avatarLayout.FillDirection = Enum.FillDirection.Horizontal
             avatarLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-            avatarLayout.Padding = UDim.new(0, 3)
+            avatarLayout.Padding = UDim.new(0, 7)
             avatarLayout.SortOrder = Enum.SortOrder.LayoutOrder
             avatarLayout.Parent = avatarStrip
             for j, clientInfo in ipairs(clientList) do
@@ -849,11 +875,30 @@ local function updateServerListUI(serverData)
     slUpdateScrollThumb()
 end
 
+local function showServerListError(msg)
+    for _, child in ipairs(slScrollFrame:GetChildren()) do
+        if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end
+    end
+    local errLabel = Instance.new("TextLabel")
+    errLabel.Size = UDim2.new(1, 0, 0, 50)
+    errLabel.BackgroundTransparency = 1
+    errLabel.Text = msg
+    errLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+    errLabel.TextSize = 13
+    errLabel.Font = Enum.Font.GothamBold
+    errLabel.TextXAlignment = Enum.TextXAlignment.Center
+    errLabel.TextYAlignment = Enum.TextYAlignment.Center
+    errLabel.TextWrapped = true
+    errLabel.Parent = slScrollFrame
+end
+
 local function requestServerList()
     if wsConnected and ws then
         pcall(function()
             ws:Send(HttpService:JSONEncode({ type = "get_servers" }))
         end)
+    else
+        showServerListError("Unable to connect to server.\nTrying to reconnect...")
     end
 end
 
@@ -993,15 +1038,20 @@ task.spawn(function()
     end
 end)
 
+local wsAttempt = 0
+
 local function wsConnect()
     local ok, result = pcall(function()
         return WebSocket.connect("ws://92.246.139.177:1000")
     end)
     if not ok then
+        wsAttempt = wsAttempt + 1
         warn("ChatService: connect failed:", result)
+        addMessage("System", "[attempt " .. wsAttempt .. "] Unable to connect. Retry in 5s...", Color3.fromRGB(255, 80, 80))
         task.delay(5, wsConnect)
         return
     end
+    wsAttempt = 0
 
     ws = result
     wsConnected = true
@@ -1060,6 +1110,24 @@ local function wsConnect()
             return
         end
 
+        if data.type == "history" then
+            if type(data.messages) == "table" then
+                for _, msg in ipairs(data.messages) do
+                    addMessage(
+                        tostring(msg.name or "?"),
+                        tostring(msg.text or ""),
+                        nil,
+                        tostring(msg.color or "#FFFFFF"),
+                        true
+                    )
+                end
+                task.wait()
+                messageList.CanvasPosition = Vector2.new(0, messageList.AbsoluteCanvasSize.Y)
+                updateScrollThumb()
+            end
+            return
+        end
+
         if data.type == "server_list" then
             if type(data.servers) == "table" then
                 updateServerListUI(data.servers)
@@ -1077,6 +1145,14 @@ local function wsConnect()
         wsConnected = false
         ws = nil
         warn("ChatService: closed reconnect wait 5s...")
+        addMessage("System", "Disconnected from SNPWARE CHAT. Reconnecting in 5s...", Color3.fromRGB(255, 120, 80))
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "SNPWARE CHAT";
+                Text  = "Connection lost. Reconnecting...";
+                Duration = 5;
+            })
+        end)
         task.delay(5, wsConnect)
     end)
 end

@@ -470,7 +470,8 @@ end)
 
 chatInput.Focused:Connect(resetActivityTimer)
 chatWindow.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
         resetActivityTimer()
     end
 end)

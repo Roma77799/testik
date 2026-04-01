@@ -91,7 +91,7 @@ chatWindow.Parent = screenGui
 Instance.new("UICorner", chatWindow).CornerRadius = UDim.new(0, 15)
 
 local header = Instance.new("TextLabel")
-header.Size = UDim2.new(1, -52, 0, 30)
+header.Size = UDim2.new(1, -64, 0, 30)
 header.Position = UDim2.new(0, 8, 0, 4)
 header.BackgroundTransparency = 1
 header.Text = "SNPWARE CHAT UNCENSORED"
@@ -111,8 +111,8 @@ closeButton.Parent = chatWindow
 local serverListBtn = Instance.new("ImageButton")
 serverListBtn.Name = "ServerListBtn"
 serverListBtn.Image = "rbxassetid://117293331356936"
-serverListBtn.Size = UDim2.new(0, 22, 0, 22)
-serverListBtn.Position = UDim2.new(1, -52, 0, 6)
+serverListBtn.Size = UDim2.fromOffset(26, 26)
+serverListBtn.Position = UDim2.new(1, -60, 0, 2)
 serverListBtn.BackgroundTransparency = 1
 serverListBtn.AutoButtonColor = false
 serverListBtn.Parent = chatWindow
@@ -223,6 +223,10 @@ local serverListDragging    = false
 local serverListDragActiveInput
 local serverListDragStart
 local serverListDragWindowStart
+local slIsDraggingScrollThumb = false
+local slScrollThumbDragStart
+local slScrollThumbStartY     = 0
+local slScrollActiveInput
 
 local function updateChatIcon()
     if chatWindow.Visible then
@@ -518,7 +522,7 @@ local dragWindowStart
 
 chatWindow.InputBegan:Connect(function(input)
     if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
-    and not isResizing and not isDraggingScrollThumb then
+    and not isResizing and not isDraggingScrollThumb and not serverListDragging and not serverListResizing then
         dragging = true
         dragActiveInput = input
         dragStart = input.Position
@@ -572,7 +576,7 @@ local slHeader = Instance.new("TextLabel")
 slHeader.Size = UDim2.new(1, -52, 0, 30)
 slHeader.Position = UDim2.new(0, 8, 0, 4)
 slHeader.BackgroundTransparency = 1
-slHeader.Text = "SERVER LIST"
+slHeader.Text = "SERVER LIST (delta & krnl don't support)"
 slHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
 slHeader.TextSize = 13
 slHeader.Font = Enum.Font.GothamBold
@@ -609,6 +613,33 @@ slListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 slListLayout.Padding = UDim.new(0, 4)
 slListLayout.Parent = slScrollFrame
 
+local slScrollPadding = Instance.new("UIPadding")
+slScrollPadding.PaddingLeft   = UDim.new(0, 3)
+slScrollPadding.PaddingRight  = UDim.new(0, 3)
+slScrollPadding.PaddingTop    = UDim.new(0, 3)
+slScrollPadding.PaddingBottom = UDim.new(0, 3)
+slScrollPadding.Parent = slScrollFrame
+
+local slScrollTrack = Instance.new("Frame")
+slScrollTrack.Name = "SlScrollTrack"
+slScrollTrack.Size = UDim2.new(0, 4, 1, -44)
+slScrollTrack.Position = UDim2.new(1, -6, 0, 42)
+slScrollTrack.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+slScrollTrack.BackgroundTransparency = 0.85
+slScrollTrack.BorderSizePixel = 0
+slScrollTrack.Visible = false
+slScrollTrack.Parent = serverListWindow
+Instance.new("UICorner", slScrollTrack).CornerRadius = UDim.new(1, 0)
+
+local slScrollThumb = Instance.new("Frame")
+slScrollThumb.Name = "SlScrollThumb"
+slScrollThumb.Size = UDim2.new(1, 0, 0, 24)
+slScrollThumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+slScrollThumb.BackgroundTransparency = 0.35
+slScrollThumb.BorderSizePixel = 0
+slScrollThumb.Parent = slScrollTrack
+Instance.new("UICorner", slScrollThumb).CornerRadius = UDim.new(1, 0)
+
 local slResizeHandle = Instance.new("Frame")
 slResizeHandle.Size = UDim2.new(0, 32, 0, 32)
 slResizeHandle.Position = UDim2.new(1, 0, 1, 0)
@@ -627,15 +658,62 @@ slResizeImage.AnchorPoint = Vector2.new(0.5, 0.5)
 slResizeImage.ImageTransparency = 1
 slResizeImage.Parent = slResizeHandle
 
+local function slUpdateScrollThumb()
+    local canvasHeight = slScrollFrame.AbsoluteCanvasSize.Y
+    local viewHeight   = slScrollFrame.AbsoluteWindowSize.Y
+    local trackHeight  = slScrollTrack.AbsoluteSize.Y
+    if viewHeight <= 0 or trackHeight <= 0 or canvasHeight <= viewHeight then
+        slScrollTrack.Visible = false
+        slScrollThumb.Position = UDim2.fromOffset(0, 0)
+        slScrollThumb.Size = UDim2.new(1, 0, 1, 0)
+        return
+    end
+    slScrollTrack.Visible = true
+    local thumbHeight = math.clamp(math.floor((viewHeight / canvasHeight) * trackHeight), 24, trackHeight)
+    local maxCanvasY  = math.max(0, canvasHeight - viewHeight)
+    local scrollRatio = maxCanvasY > 0 and (slScrollFrame.CanvasPosition.Y / maxCanvasY) or 0
+    local maxThumbY   = math.max(0, trackHeight - thumbHeight)
+    local thumbY      = math.floor(maxThumbY * math.clamp(scrollRatio, 0, 1))
+    slScrollThumb.Size     = UDim2.new(1, 0, 0, thumbHeight)
+    slScrollThumb.Position = UDim2.fromOffset(0, thumbY)
+end
+
+local function slSetScrollFromThumb(offsetY)
+    local trackHeight  = slScrollTrack.AbsoluteSize.Y
+    local thumbHeight  = slScrollThumb.AbsoluteSize.Y
+    local canvasHeight = slScrollFrame.AbsoluteCanvasSize.Y
+    local viewHeight   = slScrollFrame.AbsoluteWindowSize.Y
+    local maxThumbY    = math.max(0, trackHeight - thumbHeight)
+    local maxCanvasY   = math.max(0, canvasHeight - viewHeight)
+    if maxThumbY <= 0 or maxCanvasY <= 0 then
+        slScrollFrame.CanvasPosition = Vector2.new(0, 0)
+        return
+    end
+    slScrollFrame.CanvasPosition = Vector2.new(0, math.floor(maxCanvasY * math.clamp(offsetY / maxThumbY, 0, 1)))
+end
+
 local function updateServerListUI(serverData)
     for _, child in ipairs(slScrollFrame:GetChildren()) do
         if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end
     end
     if type(serverData) ~= "table" then return end
     local myJobId = tostring(getgenv().haha or "")
+    table.sort(serverData, function(a, b)
+        local aC = tostring(a.jobId or "") == myJobId
+        local bC = tostring(b.jobId or "") == myJobId
+        if aC ~= bC then return aC end
+        return (tonumber(a.count) or 0) > (tonumber(b.count) or 0)
+    end)
+    local frameWidth = slScrollFrame.AbsoluteSize.X
+    if frameWidth <= 10 then
+        frameWidth = serverListLastSize.X.Offset - 22
+    end
+    local maxAvatars = math.max(0, math.floor((frameWidth - 130) / 27))
     for i, entry in ipairs(serverData) do
         local jobId = tostring(entry.jobId or "")
         local count = tonumber(entry.count) or 0
+        local clientList = type(entry.clients) == "table" and entry.clients or {}
+        local isCurrentServer = (jobId == myJobId)
         local row = Instance.new("Frame")
         row.Size = UDim2.new(1, 0, 0, 40)
         row.BackgroundColor3 = Color3.fromRGB(35, 37, 40)
@@ -644,8 +722,15 @@ local function updateServerListUI(serverData)
         row.LayoutOrder = i
         row.Parent = slScrollFrame
         Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+        if isCurrentServer then
+            local stroke = Instance.new("UIStroke")
+            stroke.Thickness = 2
+            stroke.Color = Color3.fromRGB(40, 180, 60)
+            stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            stroke.Parent = row
+        end
         local indexLabel = Instance.new("TextLabel")
-        indexLabel.Size = UDim2.new(0, 24, 1, 0)
+        indexLabel.Size = UDim2.new(0, 22, 1, 0)
         indexLabel.Position = UDim2.new(0, 8, 0, 0)
         indexLabel.BackgroundTransparency = 1
         indexLabel.Text = tostring(i) .. "."
@@ -653,49 +738,101 @@ local function updateServerListUI(serverData)
         indexLabel.TextSize = 13
         indexLabel.Font = Enum.Font.Gotham
         indexLabel.TextXAlignment = Enum.TextXAlignment.Left
+        indexLabel.TextYAlignment = Enum.TextYAlignment.Center
         indexLabel.Parent = row
+        -- inline container: countLabel + avatars side by side
+        local infoRow = Instance.new("Frame")
+        infoRow.Size = UDim2.new(1, -130, 1, 0)
+        infoRow.Position = UDim2.new(0, 36, 0, 0)
+        infoRow.BackgroundTransparency = 1
+        infoRow.ClipsDescendants = true
+        infoRow.Parent = row
+        local infoLayout = Instance.new("UIListLayout")
+        infoLayout.FillDirection = Enum.FillDirection.Horizontal
+        infoLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        infoLayout.Padding = UDim.new(0, 6)
+        infoLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        infoLayout.Parent = infoRow
         local countLabel = Instance.new("TextLabel")
-        countLabel.Size = UDim2.new(0, 52, 1, 0)
-        countLabel.Position = UDim2.new(0, 36, 0, 0)
+        countLabel.Size = UDim2.fromOffset(0, 28)
+        countLabel.AutomaticSize = Enum.AutomaticSize.X
         countLabel.BackgroundTransparency = 1
-        countLabel.Text = count .. "/12"
+        countLabel.Text = tostring(count) .. (count == 1 and " client" or " client's")
         countLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
         countLabel.TextSize = 14
         countLabel.Font = Enum.Font.GothamBold
         countLabel.TextXAlignment = Enum.TextXAlignment.Left
-        countLabel.Parent = row
-        local infoLabel = Instance.new("TextLabel")
-        infoLabel.Size = UDim2.new(1, -188, 1, 0)
-        infoLabel.Position = UDim2.new(0, 94, 0, 0)
-        infoLabel.BackgroundTransparency = 1
-        infoLabel.Text = "snp chat clients"
-        infoLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
-        infoLabel.TextSize = 12
-        infoLabel.Font = Enum.Font.Gotham
-        infoLabel.TextXAlignment = Enum.TextXAlignment.Left
-        infoLabel.Parent = row
-        local isCurrentServer = (jobId == myJobId)
+        countLabel.TextYAlignment = Enum.TextYAlignment.Center
+        countLabel.LayoutOrder = 1
+        countLabel.Parent = infoRow
+        if maxAvatars > 0 and #clientList > 0 then
+            local shown = math.min(#clientList, maxAvatars)
+            local avatarStrip = Instance.new("Frame")
+            avatarStrip.Size = UDim2.fromOffset(shown * 24 + (shown - 1) * 3, 24)
+            avatarStrip.BackgroundTransparency = 1
+            avatarStrip.LayoutOrder = 2
+            avatarStrip.Parent = infoRow
+            local avatarLayout = Instance.new("UIListLayout")
+            avatarLayout.FillDirection = Enum.FillDirection.Horizontal
+            avatarLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+            avatarLayout.Padding = UDim.new(0, 3)
+            avatarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+            avatarLayout.Parent = avatarStrip
+            for j, clientInfo in ipairs(clientList) do
+                if j > maxAvatars then break end
+                local userId = tonumber(clientInfo.userId)
+                if not userId then continue end
+                local avatarColor = tostring(clientInfo.color or "#FFFFFF")
+                local r = tonumber("0x" .. avatarColor:sub(2,3)) or 255
+                local g = tonumber("0x" .. avatarColor:sub(4,5)) or 255
+                local b = tonumber("0x" .. avatarColor:sub(6,7)) or 255
+                local img = Instance.new("ImageLabel")
+                img.Size = UDim2.fromOffset(24, 24)
+                img.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+                img.BackgroundTransparency = 0.3
+                img.BorderSizePixel = 0
+                img.LayoutOrder = j
+                img.Parent = avatarStrip
+                Instance.new("UICorner", img).CornerRadius = UDim.new(1, 0)
+                local stroke = Instance.new("UIStroke")
+                stroke.Thickness = 2
+                stroke.Color = Color3.fromRGB(r, g, b)
+                stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+                stroke.Parent = img
+                local capturedImg = img
+                task.spawn(function()
+                    local ok2, url = pcall(function()
+                        return game:GetService("Players"):GetUserThumbnailAsync(
+                            userId,
+                            Enum.ThumbnailType.HeadShot,
+                            Enum.ThumbnailSize.Size48x48
+                        )
+                    end)
+                    if ok2 and capturedImg.Parent then
+                        capturedImg.Image = url
+                    end
+                end)
+            end
+        end
         local joinBtn = Instance.new("TextButton")
         joinBtn.Size = UDim2.new(0, 82, 0, 26)
         joinBtn.Position = UDim2.new(1, -90, 0.5, 0)
         joinBtn.AnchorPoint = Vector2.new(0, 0.5)
-        joinBtn.BackgroundColor3 = isCurrentServer and Color3.fromRGB(40, 80, 40) or Color3.fromRGB(40, 55, 70)
-        joinBtn.BackgroundTransparency = 0.2
-        joinBtn.Text = isCurrentServer and "current" or "join"
+        joinBtn.BackgroundColor3 = Color3.fromRGB(51, 95, 255)
+        joinBtn.BackgroundTransparency = 0
+        joinBtn.Text = isCurrentServer and "rejoin" or "join"
         joinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
         joinBtn.TextSize = 13
         joinBtn.Font = Enum.Font.GothamBold
-        joinBtn.AutoButtonColor = not isCurrentServer
+        joinBtn.AutoButtonColor = true
         joinBtn.Parent = row
-        Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 6)
-        if not isCurrentServer then
-            local capturedJobId = jobId
-            joinBtn.MouseButton1Click:Connect(function()
-                pcall(function()
-                    game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, capturedJobId)
-                end)
+        Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 8)
+        local capturedJobId = jobId
+        joinBtn.MouseButton1Click:Connect(function()
+            pcall(function()
+                game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, capturedJobId)
             end)
-        end
+        end)
     end
     if #serverData == 0 then
         local noLabel = Instance.new("TextLabel")
@@ -708,6 +845,8 @@ local function updateServerListUI(serverData)
         noLabel.TextXAlignment = Enum.TextXAlignment.Center
         noLabel.Parent = slScrollFrame
     end
+    task.wait()
+    slUpdateScrollThumb()
 end
 
 local function requestServerList()
@@ -739,9 +878,29 @@ serverListBtn.MouseButton1Click:Connect(function()
     if serverListVisible then closeServerList() else openServerList() end
 end)
 
+slScrollThumb.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        slIsDraggingScrollThumb = true
+        slScrollActiveInput     = input
+        slScrollThumbDragStart  = input.Position
+        slScrollThumbStartY     = slScrollThumb.Position.Y.Offset
+    end
+end)
+
+slScrollTrack.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        slSetScrollFromThumb(input.Position.Y - slScrollTrack.AbsolutePosition.Y - (slScrollThumb.AbsoluteSize.Y / 2))
+    end
+end)
+
+slScrollFrame:GetPropertyChangedSignal("CanvasPosition"):Connect(slUpdateScrollThumb)
+slScrollFrame:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(slUpdateScrollThumb)
+slScrollFrame:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(slUpdateScrollThumb)
+serverListWindow:GetPropertyChangedSignal("AbsoluteSize"):Connect(slUpdateScrollThumb)
+
 serverListWindow.InputBegan:Connect(function(input)
     if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
-    and not serverListResizing then
+    and not serverListResizing and not dragging and not isResizing then
         serverListDragging = true
         serverListDragActiveInput = input
         serverListDragStart = input.Position
@@ -762,6 +921,12 @@ UserInputService.InputChanged:Connect(function(input)
             math.clamp(serverListDragWindowStart.X + d.X, 0, viewport.X - winSize.X),
             math.clamp(serverListDragWindowStart.Y + d.Y, 0, viewport.Y - winSize.Y)
         )
+    end
+    if slIsDraggingScrollThumb and (
+        input.UserInputType == Enum.UserInputType.MouseMovement
+        or (input.UserInputType == Enum.UserInputType.Touch and input == slScrollActiveInput)
+    ) then
+        slSetScrollFromThumb(slScrollThumbStartY + (input.Position.Y - slScrollThumbDragStart.Y))
     end
     if serverListResizing and (
         input.UserInputType == Enum.UserInputType.MouseMovement
@@ -814,6 +979,8 @@ UserInputService.InputEnded:Connect(function(input)
         serverListDragActiveInput = nil
         serverListResizing = false
         serverListResizeActiveInput = nil
+        slIsDraggingScrollThumb = false
+        slScrollActiveInput = nil
     end
 end)
 
@@ -840,9 +1007,10 @@ local function wsConnect()
     wsConnected = true
 
     ws:Send(HttpService:JSONEncode({
-        type  = "register",
-        jobId = getgenv().haha,
-        name  = player.Name,
+        type   = "register",
+        jobId  = getgenv().haha,
+        name   = player.Name,
+        userId = player.UserId,
     }))
 
     ws.OnMessage:Connect(function(raw)

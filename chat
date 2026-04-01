@@ -549,9 +549,41 @@ local function wsConnect()
             return
         end
 
+        if data.type == "self_join" then
+            addMessage("System", "You connected to SNPWARE CHAT!", Color3.fromRGB(100, 220, 255))
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "SNPWARE CHAT";
+                Text  = "You connected to the server!";
+                Duration = 5;
+            })
+            return
+        end
+
+        if data.type == "join" then
+            local name = tostring(data.name or "?")
+            addMessage("System", name .. " connected to server!", Color3.fromRGB(100, 220, 255))
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "SNPWARE CHAT";
+                Text  = name .. " connected to server!";
+                Duration = 5;
+            })
+            return
+        end
+
+        if data.type == "leave" then
+            local name = tostring(data.name or "?")
+            addMessage("System", name .. " left the server.", Color3.fromRGB(180, 180, 180))
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "SNPWARE CHAT";
+                Text  = name .. " left the server.";
+                Duration = 5;
+            })
+            return
+        end
+
         if data.type == "spam_warn" then
             local remaining = tonumber(data.remaining) or 60
-            addMessage("⚠ System", "Too many request. Wait " .. remaining .. " sec.", Color3.fromRGB(255, 80, 80))
+            addMessage("System", "Too many request. Wait " .. remaining .. " sec.", Color3.fromRGB(255, 80, 80))
             return
         end
 

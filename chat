@@ -1,1161 +1,1553 @@
-local CoreGui = game:GetService("CoreGui")
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
-local RunService = game:GetService("RunService")
-
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui", 600)
-
-local function delta()
-    if getproperties then
-        local props = getproperties(game)
-        return props["JobId"] or props.JobId
-    elseif gethiddenproperty then
-        return gethiddenproperty(game, "JobId")
-    end
-end
-if identifyexecutor and type(identifyexecutor) == "function" then
-    local suc, res = pcall(identifyexecutor)
-    if suc and res then
-        local executor_name = string.lower(tostring(res))
-        if string.find(executor_name, "delta") or string.find(executor_name, "krnl") then
-            getgenv().haha = delta()
-        elseif string.find(executor_name, "solara") then
-            return warn("Solara executor detected. Exiting...")
-        else
-            getgenv().haha = tostring(game.JobId)
-        end
-    end
-end
-local muteButton
-local sus = pcall(function()
-    muteButton = playerGui:WaitForChild("GameTopbar", 120):WaitForChild("Container", 120):WaitForChild("Mute", 120)
-end)
-if not sus then warn("mutebutton miss") return end
-
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "RobloxChatReplica"
-screenGui.ResetOnSpawn = false
-screenGui.DisplayOrder = 10
-screenGui.Parent = CoreGui
-
-local chatIcon = Instance.new("ImageButton")
-chatIcon.AutoButtonColor = true
-chatIcon.BackgroundColor3 = Color3.fromRGB(18, 18, 21)
-chatIcon.BackgroundTransparency = 0
-chatIcon.Image = ""
-chatIcon.Size = UDim2.fromOffset(40, 40)
-chatIcon.Parent = screenGui
-Instance.new("UICorner", chatIcon).CornerRadius = UDim.new(1, 0)
-
-local chatIconImage = Instance.new("ImageLabel")
-chatIconImage.Name = "Icon"
-chatIconImage.BackgroundTransparency = 1
-chatIconImage.Image = "rbxassetid://70376310988134"
-chatIconImage.ScaleType = Enum.ScaleType.Fit
-chatIconImage.Size = UDim2.new(1, -12, 1, -12)
-chatIconImage.Position = UDim2.new(0, 6, 0, 6)
-chatIconImage.Parent = chatIcon
-
-local function alignIcon()
-    if muteButton then
-        local pos  = muteButton.AbsolutePosition
-        local size = muteButton.AbsoluteSize
-        chatIcon.Position = UDim2.fromOffset(
-            pos.X + (size.X - 40) / 2,
-            pos.Y + size.Y + 6
-        )
-    end
-end
-if muteButton then
-    muteButton:GetPropertyChangedSignal("AbsolutePosition"):Connect(alignIcon)
-    muteButton:GetPropertyChangedSignal("AbsoluteSize"):Connect(alignIcon)
-    alignIcon()
-end
-
-local lastSize     = UDim2.new(0, 380, 0, 230)
-local lastPosition = UDim2.new(0.5, 0, 0.5, 0)
-local lastAnchor   = Vector2.new(0.5, 0.5)
-
-local chatWindow = Instance.new("Frame")
-chatWindow.Name = "ChatWindow"
-chatWindow.BackgroundColor3 = Color3.fromRGB(25, 27, 29)
-chatWindow.BackgroundTransparency = 0.3
-chatWindow.BorderSizePixel = 0
-chatWindow.Visible = false
-chatWindow.Active = true
-chatWindow.ClipsDescendants = false
-chatWindow.Parent = screenGui
-Instance.new("UICorner", chatWindow).CornerRadius = UDim.new(0, 15)
-
-local header = Instance.new("TextLabel")
-header.Size = UDim2.new(1, -64, 0, 30)
-header.Position = UDim2.new(0, 8, 0, 4)
-header.BackgroundTransparency = 1
-header.Text = "SNPWARE CHAT UNCENSORED"
-header.TextColor3 = Color3.fromRGB(255, 255, 255)
-header.TextSize = 13
-header.Font = Enum.Font.GothamBold
-header.TextXAlignment = Enum.TextXAlignment.Left
-header.Parent = chatWindow
-
-local closeButton = Instance.new("ImageButton")
-closeButton.Image = "rbxassetid://102770163148417"
-closeButton.Size = UDim2.new(0, 22, 0, 22)
-closeButton.Position = UDim2.new(1, -28, 0, 6)
-closeButton.BackgroundTransparency = 1
-closeButton.Parent = chatWindow
-
-local serverListBtn = Instance.new("ImageButton")
-serverListBtn.Name = "ServerListBtn"
-serverListBtn.Image = "rbxassetid://117293331356936"
-serverListBtn.Size = UDim2.fromOffset(26, 26)
-serverListBtn.Position = UDim2.new(1, -60, 0, 2)
-serverListBtn.BackgroundTransparency = 1
-serverListBtn.AutoButtonColor = false
-serverListBtn.Parent = chatWindow
-
-local messageList = Instance.new("ScrollingFrame")
-messageList.Size = UDim2.new(1, -16, 1, -86)
-messageList.Position = UDim2.new(0, 8, 0, 34)
-messageList.BackgroundTransparency = 1
-messageList.BorderSizePixel = 0
-messageList.ScrollBarThickness = 0
-messageList.CanvasSize = UDim2.new(0, 0, 0, 0)
-messageList.AutomaticCanvasSize = Enum.AutomaticSize.Y
-messageList.Parent = chatWindow
-
-local listLayout = Instance.new("UIListLayout")
-listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-listLayout.Padding = UDim.new(0, 4)
-listLayout.Parent = messageList
-
-local scrollTrack = Instance.new("Frame")
-scrollTrack.Name = "ScrollTrack"
-scrollTrack.Size = UDim2.new(0, 4, 1, -86)
-scrollTrack.Position = UDim2.new(1, -6, 0, 34)
-scrollTrack.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-scrollTrack.BackgroundTransparency = 0.85
-scrollTrack.BorderSizePixel = 0
-scrollTrack.Visible = false
-scrollTrack.Parent = chatWindow
-Instance.new("UICorner", scrollTrack).CornerRadius = UDim.new(1, 0)
-
-local scrollThumb = Instance.new("Frame")
-scrollThumb.Name = "ScrollThumb"
-scrollThumb.Size = UDim2.new(1, 0, 0, 24)
-scrollThumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-scrollThumb.BackgroundTransparency = 0.35
-scrollThumb.BorderSizePixel = 0
-scrollThumb.Parent = scrollTrack
-Instance.new("UICorner", scrollThumb).CornerRadius = UDim.new(1, 0)
-
-local inputContainer = Instance.new("Frame")
-inputContainer.Size = UDim2.new(1, -16, 0, 32)
-inputContainer.Position = UDim2.new(0, 8, 1, -8)
-inputContainer.AnchorPoint = Vector2.new(0, 1)
-inputContainer.BackgroundColor3 = Color3.fromRGB(25, 27, 29)
-inputContainer.BackgroundTransparency = 0.55
-inputContainer.AutomaticSize = Enum.AutomaticSize.Y
-inputContainer.Parent = chatWindow
-Instance.new("UICorner", inputContainer).CornerRadius = UDim.new(0, 8)
-
-local inputPadding = Instance.new("UIPadding")
-inputPadding.PaddingLeft   = UDim.new(0, 10)
-inputPadding.PaddingRight  = UDim.new(0, 38)
-inputPadding.PaddingTop    = UDim.new(0, 6)
-inputPadding.PaddingBottom = UDim.new(0, 6)
-inputPadding.Parent = inputContainer
-
-local chatInput = Instance.new("TextBox")
-chatInput.Size = UDim2.new(1, 0, 0, 20)
-chatInput.BackgroundTransparency = 1
-chatInput.Text = ""
-chatInput.PlaceholderText = "To chat click here or use comma."
-chatInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-chatInput.TextSize = 14
-chatInput.Font = Enum.Font.Gotham
-chatInput.TextXAlignment = Enum.TextXAlignment.Left
-chatInput.TextWrapped = true
-chatInput.AutomaticSize = Enum.AutomaticSize.Y
-chatInput.ClearTextOnFocus = false
-chatInput.Parent = inputContainer
-
-local sendHitbox = Instance.new("TextButton")
-sendHitbox.Size = UDim2.new(0, 44, 0, 44)
-sendHitbox.Position = UDim2.new(1, 46, 0.5, 0)
-sendHitbox.AnchorPoint = Vector2.new(1, 0.5)
-sendHitbox.BackgroundTransparency = 1
-sendHitbox.Text = ""
-sendHitbox.ZIndex = 5
-sendHitbox.Parent = inputContainer
-
-local sendButton = Instance.new("ImageLabel")
-sendButton.Image = "rbxassetid://79859235777238"
-sendButton.Size = UDim2.new(0, 26, 0, 26)
-sendButton.Position = UDim2.new(0.5, 0, 0.5, 0)
-sendButton.AnchorPoint = Vector2.new(0.5, 0.5)
-sendButton.BackgroundTransparency = 1
-sendButton.ZIndex = 4
-sendButton.Parent = sendHitbox
-
-local lastActivityTime      = tick()
-local isCollapsed           = false
-local isDraggingScrollThumb = false
-local scrollThumbDragStart
-local scrollThumbStartY     = 0
-local scrollActiveInput
-local dragActiveInput
-local resizeActiveInput
-local ws
-local wsConnected           = false
-local myColorHex            = "#FFFFFF"
-local hasUnread             = false
-local serverListVisible     = false
-local serverListLastSize    = UDim2.fromOffset(300, 220)
-local serverListLastPos     = UDim2.new(0.5, 50, 0.5, 50)
-local serverListLastAnchor  = Vector2.new(0.5, 0.5)
-local serverListResizing    = false
-local serverListResizeActiveInput
-local serverListDragging    = false
-local serverListDragActiveInput
-local serverListDragStart
-local serverListDragWindowStart
-local slIsDraggingScrollThumb = false
-local slScrollThumbDragStart
-local slScrollThumbStartY     = 0
-local slScrollActiveInput
-
-local function updateChatIcon()
-    if chatWindow.Visible then
-        chatIconImage.Image = "rbxassetid://72618543563266"
-    elseif hasUnread then
-        chatIconImage.Image = "rbxassetid://86437531464293"
-    else
-        chatIconImage.Image = "rbxassetid://70376310988134"
-    end
-end
-
-local function updateScrollThumb()
-    local canvasHeight = messageList.AbsoluteCanvasSize.Y
-    local viewHeight   = messageList.AbsoluteWindowSize.Y
-    local trackHeight  = scrollTrack.AbsoluteSize.Y
-    if viewHeight <= 0 or trackHeight <= 0 or canvasHeight <= viewHeight then
-        scrollTrack.Visible = false
-        scrollThumb.Position = UDim2.fromOffset(0, 0)
-        scrollThumb.Size = UDim2.new(1, 0, 1, 0)
-        return
-    end
-    scrollTrack.Visible = true
-    local thumbHeight = math.clamp(math.floor((viewHeight / canvasHeight) * trackHeight), 24, trackHeight)
-    local maxCanvasY  = math.max(0, canvasHeight - viewHeight)
-    local scrollRatio = maxCanvasY > 0 and (messageList.CanvasPosition.Y / maxCanvasY) or 0
-    local maxThumbY   = math.max(0, trackHeight - thumbHeight)
-    local thumbY      = math.floor(maxThumbY * math.clamp(scrollRatio, 0, 1))
-    scrollThumb.Size     = UDim2.new(1, 0, 0, thumbHeight)
-    scrollThumb.Position = UDim2.fromOffset(0, thumbY)
-end
-
-local function setScrollFromThumb(offsetY)
-    local trackHeight  = scrollTrack.AbsoluteSize.Y
-    local thumbHeight  = scrollThumb.AbsoluteSize.Y
-    local canvasHeight = messageList.AbsoluteCanvasSize.Y
-    local viewHeight   = messageList.AbsoluteWindowSize.Y
-    local maxThumbY    = math.max(0, trackHeight - thumbHeight)
-    local maxCanvasY   = math.max(0, canvasHeight - viewHeight)
-    if maxThumbY <= 0 or maxCanvasY <= 0 then
-        messageList.CanvasPosition = Vector2.new(0, 0)
-        return
-    end
-    messageList.CanvasPosition = Vector2.new(0, math.floor(maxCanvasY * math.clamp(offsetY / maxThumbY, 0, 1)))
-end
-
-local function setContentTransparency(alpha)
-    local isHiding = alpha == 1
-    TweenService:Create(chatWindow, TweenInfo.new(0.4), {
-        BackgroundTransparency = isHiding and 1 or 0.3
-    }):Play()
-    TweenService:Create(inputContainer, TweenInfo.new(0.4), {
-        BackgroundTransparency = isHiding and 1 or 0.55
-    }):Play()
-    for _, child in ipairs(inputContainer:GetDescendants()) do
-        if child:IsA("TextLabel") or child:IsA("TextBox") then
-            TweenService:Create(child, TweenInfo.new(0.4), { TextTransparency = alpha }):Play()
-        end
-        if child:IsA("ImageLabel") then
-            TweenService:Create(child, TweenInfo.new(0.4), { ImageTransparency = alpha }):Play()
-        end
-    end
-    header.TextTransparency = 0
-    TweenService:Create(closeButton, TweenInfo.new(0.4), { ImageTransparency = 0 }):Play()
-end
-
-local function resetActivityTimer()
-    lastActivityTime = tick()
-    if isCollapsed and chatWindow.Visible then
-        isCollapsed = false
-        setContentTransparency(0)
-    end
-end
-
-local function addMessage(sender, text, labelColor, nameHex, skipScroll)
-    local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, 0, 0, 0)
-    container.AutomaticSize = Enum.AutomaticSize.Y
-    container.BackgroundTransparency = 1
-    container.BorderSizePixel = 0
-    container.Parent = messageList
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -22, 0, 0)
-    label.AutomaticSize = Enum.AutomaticSize.Y
-    label.BackgroundTransparency = 1
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 14
-    label.TextColor3 = labelColor or Color3.new(1, 1, 1)
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.RichText = true
-    label.TextWrapped = true
-    if nameHex then
-        label.Text = "<b><font color='" .. nameHex .. "'>" .. sender .. "</font>:</b> " .. text
-    else
-        label.Text = "<b>" .. sender .. ":</b> " .. text
-    end
-    label.Parent = container
-
-    local copyBtn = Instance.new("TextButton")
-    copyBtn.Size = UDim2.fromOffset(18, 18)
-    copyBtn.Position = UDim2.new(1, -20, 0, 1)
-    copyBtn.BackgroundTransparency = 1
-    copyBtn.Text = "📋"
-    copyBtn.TextSize = 13
-    copyBtn.Font = Enum.Font.GothamBold
-    copyBtn.TextColor3 = Color3.fromRGB(110, 110, 120)
-    copyBtn.AutoButtonColor = false
-    copyBtn.BorderSizePixel = 0
-    local copyText = sender .. ": " .. text
-    copyBtn.MouseButton1Click:Connect(function()
-        pcall(function() setclipboard(copyText) end)
-    end)
-    copyBtn.Parent = container
-
-    if not chatWindow.Visible then
-        hasUnread = true
-        updateChatIcon()
-    end
-    if not skipScroll then
-        task.wait()
-        messageList.CanvasPosition = Vector2.new(0, messageList.AbsoluteCanvasSize.Y)
-        updateScrollThumb()
-    end
-end
-
-local function onSend()
-    local text = chatInput.Text
-    if text == "" or text:match("^%s*$") then return end
-    addMessage(player.Name, text, nil, myColorHex)
-    chatInput.Text = ""
-    if wsConnected and ws then
-        pcall(function()
-            ws:Send(HttpService:JSONEncode({
-                type = "chat",
-                text = text,
-            }))
-        end)
-    end
-end
-
-sendHitbox.MouseButton1Click:Connect(onSend)
-chatInput.FocusLost:Connect(function(enterPressed)
-    if enterPressed then onSend() end
-end)
-
-chatInput:GetPropertyChangedSignal("Text"):Connect(function()
-    local text = chatInput.Text
-    if #text > 200 then
-        local cursorPosition = chatInput.CursorPosition
-        chatInput.Text = string.sub(text, 1, 200)
-        if cursorPosition > 0 then
-            chatInput.CursorPosition = math.min(cursorPosition, 201)
-        end
-    end
-    resetActivityTimer()
-end)
-
-chatInput.Focused:Connect(resetActivityTimer)
-chatWindow.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-    or input.UserInputType == Enum.UserInputType.Touch then
-        resetActivityTimer()
-    end
-end)
-
-messageList:GetPropertyChangedSignal("CanvasPosition"):Connect(updateScrollThumb)
-messageList:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(updateScrollThumb)
-messageList:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(updateScrollThumb)
-chatWindow:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateScrollThumb)
-
-scrollThumb.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        isDraggingScrollThumb = true
-        scrollActiveInput     = input
-        scrollThumbDragStart  = input.Position
-        scrollThumbStartY     = scrollThumb.Position.Y.Offset
-        resetActivityTimer()
-    end
-end)
-
-scrollTrack.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        setScrollFromThumb(input.Position.Y - scrollTrack.AbsolutePosition.Y - (scrollThumb.AbsoluteSize.Y / 2))
-        resetActivityTimer()
-    end
-end)
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local UserInputService = game:GetService("UserInputService")
+local TextChatService = game:GetService("TextChatService")
 
 task.spawn(function()
-    while task.wait(1) do
-        if chatWindow.Visible and not isCollapsed and tick() - lastActivityTime >= 30 then
-            isCollapsed = true
-            setContentTransparency(1)
+    snyk = nil
+    local function delta()
+        if getproperties then
+            local props = getproperties(game)
+            return props["JobId"] or props.JobId
+        elseif gethiddenproperty then
+            return gethiddenproperty(game, "JobId")
         end
     end
-end)
-
-local resizeHandle = Instance.new("Frame")
-resizeHandle.Size = UDim2.new(0, 32, 0, 32)
-resizeHandle.Position = UDim2.new(1, 0, 1, 0)
-resizeHandle.AnchorPoint = Vector2.new(0.5, 0.5)
-resizeHandle.BackgroundTransparency = 1
-resizeHandle.ZIndex = 99
-resizeHandle.Active = true
-resizeHandle.Parent = chatWindow
-
-local resizeImage = Instance.new("ImageLabel")
-resizeImage.Size = UDim2.new(0, 96, 0, 96)
-resizeImage.BackgroundTransparency = 1
-resizeImage.Image = "rbxassetid://120997033468887"
-resizeImage.Position = UDim2.new(0.5, -16, 0.5, -16)
-resizeImage.AnchorPoint = Vector2.new(0.5, 0.5)
-resizeImage.ImageTransparency = 1
-resizeImage.Parent = resizeHandle
-
-local isResizing = false
-
-resizeHandle.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        isResizing = true
-        resizeActiveInput = input
-        TweenService:Create(resizeImage, TweenInfo.new(0.1), { ImageTransparency = 0.35 }):Play()
-        resetActivityTimer()
+    if identifyexecutor and type(identifyexecutor) == "function" then
+        local suc, res = pcall(identifyexecutor)
+        if suc and res then
+            local executor_name = string.lower(tostring(res))
+            if string.find(executor_name, "delta") or string.find(executor_name, "krnl") then
+                getgenv().haha = delta()
+                snyk = true
+            elseif string.find(executor_name, "solara") then
+                warn("Solara executor detected. Exiting...")
+                return
+            else
+                getgenv().haha = tostring(game.JobId)
+            end
+        end
     end
-end)
+    local muteButton
+    local sus = pcall(function()
+        muteButton = PlayerGui:WaitForChild("GameTopbar", 120):WaitForChild("Container", 120):WaitForChild("Mute", 120)
+    end)
+    if not sus then warn("mutebutton miss") return end
 
-resizeHandle.MouseEnter:Connect(function()
-    TweenService:Create(resizeImage, TweenInfo.new(0.3,
-        Enum.EasingStyle.Exponential, Enum.EasingDirection.Out),
-        { ImageTransparency = 0.8 }):Play()
-end)
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "RobloxChatReplica"
+    screenGui.ResetOnSpawn = false
+    screenGui.DisplayOrder = 10
+    screenGui.Parent = CoreGui
 
-resizeHandle.MouseLeave:Connect(function()
-    if not isResizing then
+    local chatIcon = Instance.new("ImageButton")
+    chatIcon.AutoButtonColor = true
+    chatIcon.BackgroundColor3 = Color3.fromRGB(18, 18, 21)
+    chatIcon.BackgroundTransparency = 0
+    chatIcon.Image = ""
+    chatIcon.Size = UDim2.fromOffset(40, 40)
+    chatIcon.Parent = screenGui
+    Instance.new("UICorner", chatIcon).CornerRadius = UDim.new(1, 0)
+
+    local chatIconImage = Instance.new("ImageLabel")
+    chatIconImage.Name = "Icon"
+    chatIconImage.BackgroundTransparency = 1
+    chatIconImage.Image = "rbxassetid://70376310988134"
+    chatIconImage.ScaleType = Enum.ScaleType.Fit
+    chatIconImage.Size = UDim2.new(1, -12, 1, -12)
+    chatIconImage.Position = UDim2.new(0, 6, 0, 6)
+    chatIconImage.Parent = chatIcon
+
+    local function alignIcon()
+        if muteButton then
+            local pos  = muteButton.AbsolutePosition
+            local size = muteButton.AbsoluteSize
+            chatIcon.Position = UDim2.fromOffset(
+                pos.X + (size.X - 40) / 2,
+                pos.Y + size.Y + 6
+            )
+        end
+    end
+    if muteButton then
+        muteButton:GetPropertyChangedSignal("AbsolutePosition"):Connect(alignIcon)
+        muteButton:GetPropertyChangedSignal("AbsoluteSize"):Connect(alignIcon)
+        alignIcon()
+    end
+
+    local lastSize     = UDim2.new(0, 380, 0, 230)
+    local lastPosition = UDim2.new(0.5, 0, 0.5, 0)
+    local lastAnchor   = Vector2.new(0.5, 0.5)
+
+    local chatWindow = Instance.new("Frame")
+    chatWindow.Name = "ChatWindow"
+    chatWindow.BackgroundColor3 = Color3.fromRGB(25, 27, 29)
+    chatWindow.BackgroundTransparency = 0.3
+    chatWindow.BorderSizePixel = 0
+    chatWindow.Visible = false
+    chatWindow.Active = true
+    chatWindow.ClipsDescendants = false
+    chatWindow.Parent = screenGui
+    Instance.new("UICorner", chatWindow).CornerRadius = UDim.new(0, 15)
+
+    local header = Instance.new("TextLabel")
+    header.Size = UDim2.new(1, -64, 0, 30)
+    header.Position = UDim2.new(0, 8, 0, 4)
+    header.BackgroundTransparency = 1
+    header.Text = "SNPWARE CHAT UNCENSORED"
+    header.TextColor3 = Color3.fromRGB(255, 255, 255)
+    header.TextSize = 13
+    header.Font = Enum.Font.GothamBold
+    header.TextXAlignment = Enum.TextXAlignment.Left
+    header.Parent = chatWindow
+
+    local closeButton = Instance.new("ImageButton")
+    closeButton.Image = "rbxassetid://102770163148417"
+    closeButton.Size = UDim2.new(0, 22, 0, 22)
+    closeButton.Position = UDim2.new(1, -28, 0, 6)
+    closeButton.BackgroundTransparency = 1
+    closeButton.Parent = chatWindow
+
+    local serverListBtn = Instance.new("ImageButton")
+    serverListBtn.Name = "ServerListBtn"
+    serverListBtn.Image = "rbxassetid://117293331356936"
+    serverListBtn.Size = UDim2.fromOffset(26, 26)
+    serverListBtn.Position = UDim2.new(1, -60, 0, 2)
+    serverListBtn.BackgroundTransparency = 1
+    serverListBtn.AutoButtonColor = false
+    serverListBtn.Parent = chatWindow
+
+    local messageList = Instance.new("ScrollingFrame")
+    messageList.Size = UDim2.new(1, -16, 1, -86)
+    messageList.Position = UDim2.new(0, 8, 0, 34)
+    messageList.BackgroundTransparency = 1
+    messageList.BorderSizePixel = 0
+    messageList.ScrollBarThickness = 0
+    messageList.CanvasSize = UDim2.new(0, 0, 0, 0)
+    messageList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    messageList.Parent = chatWindow
+
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Padding = UDim.new(0, 4)
+    listLayout.Parent = messageList
+
+    local scrollTrack = Instance.new("Frame")
+    scrollTrack.Name = "ScrollTrack"
+    scrollTrack.Size = UDim2.new(0, 4, 1, -86)
+    scrollTrack.Position = UDim2.new(1, -6, 0, 34)
+    scrollTrack.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    scrollTrack.BackgroundTransparency = 0.85
+    scrollTrack.BorderSizePixel = 0
+    scrollTrack.Visible = false
+    scrollTrack.Parent = chatWindow
+    Instance.new("UICorner", scrollTrack).CornerRadius = UDim.new(1, 0)
+
+    local scrollThumb = Instance.new("Frame")
+    scrollThumb.Name = "ScrollThumb"
+    scrollThumb.Size = UDim2.new(1, 0, 0, 24)
+    scrollThumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    scrollThumb.BackgroundTransparency = 0.35
+    scrollThumb.BorderSizePixel = 0
+    scrollThumb.Parent = scrollTrack
+    Instance.new("UICorner", scrollThumb).CornerRadius = UDim.new(1, 0)
+
+    local inputContainer = Instance.new("Frame")
+    inputContainer.Size = UDim2.new(1, -16, 0, 32)
+    inputContainer.Position = UDim2.new(0, 8, 1, -8)
+    inputContainer.AnchorPoint = Vector2.new(0, 1)
+    inputContainer.BackgroundColor3 = Color3.fromRGB(25, 27, 29)
+    inputContainer.BackgroundTransparency = 0.55
+    inputContainer.AutomaticSize = Enum.AutomaticSize.Y
+    inputContainer.Parent = chatWindow
+    Instance.new("UICorner", inputContainer).CornerRadius = UDim.new(0, 8)
+
+    local inputPadding = Instance.new("UIPadding")
+    inputPadding.PaddingLeft   = UDim.new(0, 10)
+    inputPadding.PaddingRight  = UDim.new(0, 38)
+    inputPadding.PaddingTop    = UDim.new(0, 6)
+    inputPadding.PaddingBottom = UDim.new(0, 6)
+    inputPadding.Parent = inputContainer
+
+    local chatInput = Instance.new("TextBox")
+    chatInput.Size = UDim2.new(1, 0, 0, 20)
+    chatInput.BackgroundTransparency = 1
+    chatInput.Text = ""
+    chatInput.PlaceholderText = "To chat click here or use comma."
+    chatInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+    chatInput.TextSize = 14
+    chatInput.Font = Enum.Font.Gotham
+    chatInput.TextXAlignment = Enum.TextXAlignment.Left
+    chatInput.TextWrapped = true
+    chatInput.AutomaticSize = Enum.AutomaticSize.Y
+    chatInput.ClearTextOnFocus = false
+    chatInput.Parent = inputContainer
+
+    local sendHitbox = Instance.new("TextButton")
+    sendHitbox.Size = UDim2.new(0, 44, 0, 44)
+    sendHitbox.Position = UDim2.new(1, 46, 0.5, 0)
+    sendHitbox.AnchorPoint = Vector2.new(1, 0.5)
+    sendHitbox.BackgroundTransparency = 1
+    sendHitbox.Text = ""
+    sendHitbox.ZIndex = 5
+    sendHitbox.Parent = inputContainer
+
+    local sendButton = Instance.new("ImageLabel")
+    sendButton.Image = "rbxassetid://79859235777238"
+    sendButton.Size = UDim2.new(0, 26, 0, 26)
+    sendButton.Position = UDim2.new(0.5, 0, 0.5, 0)
+    sendButton.AnchorPoint = Vector2.new(0.5, 0.5)
+    sendButton.BackgroundTransparency = 1
+    sendButton.ZIndex = 4
+    sendButton.Parent = sendHitbox
+
+    local lastActivityTime      = tick()
+    local isCollapsed           = false
+    local isDraggingScrollThumb = false
+    local scrollThumbDragStart
+    local scrollThumbStartY     = 0
+    local scrollActiveInput
+    local dragActiveInput
+    local resizeActiveInput
+    local ws
+    local wsConnected           = false
+    local myColorHex            = "#FFFFFF"
+    local hasUnread             = false
+    local serverListVisible     = false
+    local serverListLastSize    = UDim2.fromOffset(300, 220)
+    local serverListLastPos     = UDim2.new(0.5, 50, 0.5, 50)
+    local serverListLastAnchor  = Vector2.new(0.5, 0.5)
+    local serverListResizing    = false
+    local serverListResizeActiveInput
+    local serverListDragging    = false
+    local serverListDragActiveInput
+    local serverListDragStart
+    local serverListDragWindowStart
+    local slIsDraggingScrollThumb = false
+    local slScrollThumbDragStart
+    local slScrollThumbStartY     = 0
+    local slScrollActiveInput
+    local replyTarget             = nil  -- { name, text, nameHex }
+
+    -- ── Active Reply Bar (appears above input when replying) ──────────────────────
+    local activeReplyBar = Instance.new("Frame")
+    activeReplyBar.Name = "ActiveReplyBar"
+    activeReplyBar.Size = UDim2.new(1, -16, 0, 26)
+    activeReplyBar.BackgroundColor3 = Color3.fromRGB(35, 37, 42)
+    activeReplyBar.BackgroundTransparency = 0.35
+    activeReplyBar.BorderSizePixel = 0
+    activeReplyBar.Visible = false
+    activeReplyBar.ZIndex = 6
+    activeReplyBar.Parent = chatWindow
+    Instance.new("UICorner", activeReplyBar).CornerRadius = UDim.new(0, 6)
+
+    local activeReplyLabel = Instance.new("TextLabel")
+    activeReplyLabel.Size = UDim2.new(1, -28, 1, 0)
+    activeReplyLabel.Position = UDim2.new(0, 6, 0, 0)
+    activeReplyLabel.BackgroundTransparency = 1
+    activeReplyLabel.Font = Enum.Font.Gotham
+    activeReplyLabel.TextSize = 12
+    activeReplyLabel.TextColor3 = Color3.fromRGB(180, 180, 195)
+    activeReplyLabel.TextXAlignment = Enum.TextXAlignment.Left
+    activeReplyLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    activeReplyLabel.RichText = true
+    activeReplyLabel.ZIndex = 7
+    activeReplyLabel.Parent = activeReplyBar
+
+    local activeReplyCancelBtn = Instance.new("ImageButton")
+    activeReplyCancelBtn.Image = "rbxassetid://102770163148417"
+    activeReplyCancelBtn.Size = UDim2.fromOffset(18, 18)
+    activeReplyCancelBtn.Position = UDim2.new(1, -22, 0.5, 0)
+    activeReplyCancelBtn.AnchorPoint = Vector2.new(0, 0.5)
+    activeReplyCancelBtn.BackgroundTransparency = 1
+    activeReplyCancelBtn.ZIndex = 7
+    activeReplyCancelBtn.Parent = activeReplyBar
+
+    local MSGLIST_BASE_BOTTOM = -86
+    local REPLYBAR_H = 30  -- reply bar height + gap
+
+    local function updateActiveReplyBarPos()
+        local inputH = inputContainer.AbsoluteSize.Y
+        activeReplyBar.AnchorPoint = Vector2.new(0, 1)
+        activeReplyBar.Position = UDim2.new(0, 8, 1, -8 - inputH)
+    end
+    inputContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateActiveReplyBarPos)
+    updateActiveReplyBarPos()
+
+    local function setReplyTarget(name, text, nameHex)
+        replyTarget = { name = name, text = text, nameHex = nameHex or "#AAAAAA" }
+        local truncated = #text > 50 and string.sub(text, 1, 50) .. "\u{2026}" or text
+        activeReplyLabel.Text = "<b><font color='" .. (nameHex or "#AAAAAA") .. "'>" .. name .. "</font>:</b> " .. truncated
+        updateActiveReplyBarPos()
+        activeReplyBar.Visible = true
+        messageList.Size = UDim2.new(1, -16, 1, MSGLIST_BASE_BOTTOM - REPLYBAR_H)
+        task.defer(function() chatInput:CaptureFocus() end)
+    end
+
+    local function clearReplyTarget()
+        replyTarget = nil
+        activeReplyBar.Visible = false
+        messageList.Size = UDim2.new(1, -16, 1, MSGLIST_BASE_BOTTOM)
+    end
+
+    activeReplyCancelBtn.MouseButton1Click:Connect(clearReplyTarget)
+
+    local function updateChatIcon()
+        if chatWindow.Visible then
+            chatIconImage.Image = "rbxassetid://72618543563266"
+        elseif hasUnread then
+            chatIconImage.Image = "rbxassetid://86437531464293"
+        else
+            chatIconImage.Image = "rbxassetid://70376310988134"
+        end
+    end
+
+    local function updateScrollThumb()
+        local canvasHeight = messageList.AbsoluteCanvasSize.Y
+        local viewHeight   = messageList.AbsoluteWindowSize.Y
+        local trackHeight  = scrollTrack.AbsoluteSize.Y
+        if viewHeight <= 0 or trackHeight <= 0 or canvasHeight <= viewHeight then
+            scrollTrack.Visible = false
+            scrollThumb.Position = UDim2.fromOffset(0, 0)
+            scrollThumb.Size = UDim2.new(1, 0, 1, 0)
+            return
+        end
+        scrollTrack.Visible = true
+        local thumbHeight = math.clamp(math.floor((viewHeight / canvasHeight) * trackHeight), 24, trackHeight)
+        local maxCanvasY  = math.max(0, canvasHeight - viewHeight)
+        local scrollRatio = maxCanvasY > 0 and (messageList.CanvasPosition.Y / maxCanvasY) or 0
+        local maxThumbY   = math.max(0, trackHeight - thumbHeight)
+        local thumbY      = math.floor(maxThumbY * math.clamp(scrollRatio, 0, 1))
+        scrollThumb.Size     = UDim2.new(1, 0, 0, thumbHeight)
+        scrollThumb.Position = UDim2.fromOffset(0, thumbY)
+    end
+
+    local function setScrollFromThumb(offsetY)
+        local trackHeight  = scrollTrack.AbsoluteSize.Y
+        local thumbHeight  = scrollThumb.AbsoluteSize.Y
+        local canvasHeight = messageList.AbsoluteCanvasSize.Y
+        local viewHeight   = messageList.AbsoluteWindowSize.Y
+        local maxThumbY    = math.max(0, trackHeight - thumbHeight)
+        local maxCanvasY   = math.max(0, canvasHeight - viewHeight)
+        if maxThumbY <= 0 or maxCanvasY <= 0 then
+            messageList.CanvasPosition = Vector2.new(0, 0)
+            return
+        end
+        messageList.CanvasPosition = Vector2.new(0, math.floor(maxCanvasY * math.clamp(offsetY / maxThumbY, 0, 1)))
+    end
+
+    local function setContentTransparency(alpha)
+        local isHiding = alpha == 1
+        TweenService:Create(chatWindow, TweenInfo.new(0.4), {
+            BackgroundTransparency = isHiding and 1 or 0.3
+        }):Play()
+        TweenService:Create(inputContainer, TweenInfo.new(0.4), {
+            BackgroundTransparency = isHiding and 1 or 0.55
+        }):Play()
+        for _, child in ipairs(inputContainer:GetDescendants()) do
+            if child:IsA("TextLabel") or child:IsA("TextBox") then
+                TweenService:Create(child, TweenInfo.new(0.4), { TextTransparency = alpha }):Play()
+            end
+            if child:IsA("ImageLabel") then
+                TweenService:Create(child, TweenInfo.new(0.4), { ImageTransparency = alpha }):Play()
+            end
+        end
+        header.TextTransparency = 0
+        TweenService:Create(closeButton, TweenInfo.new(0.4), { ImageTransparency = 0 }):Play()
+    end
+
+    local function resetActivityTimer()
+        lastActivityTime = tick()
+        if isCollapsed and chatWindow.Visible then
+            isCollapsed = false
+            setContentTransparency(0)
+        end
+    end
+
+    -- ── Bubble Chat ───────────────────────────────────────────────────────────────
+    pcall(function()
+        local bubbleCfg = TextChatService:FindFirstChildOfClass("BubbleChatConfiguration")
+        if not bubbleCfg then
+            bubbleCfg = Instance.new("BubbleChatConfiguration")
+            bubbleCfg.Parent = TextChatService
+        end
+        bubbleCfg.Enabled               = true
+        bubbleCfg.BubbleDuration        = 7
+        bubbleCfg.MaxBubbles            = 3
+        bubbleCfg.BackgroundColor3      = Color3.fromRGB(15, 15, 20)
+        bubbleCfg.BackgroundTransparency = 0.08
+        bubbleCfg.TextColor3            = Color3.fromRGB(230, 230, 255)
+        bubbleCfg.TextSize              = 14
+        bubbleCfg.FontFace              = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium)
+        bubbleCfg.TailVisible           = false
+        bubbleCfg.VerticalStudsOffset   = 1.5
+        if not bubbleCfg:FindFirstChildOfClass("UICorner") then
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 12)
+            corner.Parent = bubbleCfg
+        end
+        -- Per-bubble override: custom style on each bubble
+        TextChatService.OnBubbleAdded = function(msg, adornee)
+            local props = Instance.new("BubbleChatMessageProperties")
+            props.BackgroundColor3       = Color3.fromRGB(18, 18, 24)
+            props.BackgroundTransparency = 0.08
+            props.TextColor3             = Color3.fromRGB(235, 235, 255)
+            props.TextSize               = 14
+            props.FontFace               = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium)
+            local c = Instance.new("UICorner")
+            c.CornerRadius = UDim.new(0, 12)
+            c.Parent = props
+            return props
+        end
+    end)
+
+    local function displayBubbleForPlayer(senderName, text)
+        pcall(function()
+            if senderName == LocalPlayer.Name then
+                local char = LocalPlayer.Character
+                if char then
+                    TextChatService:DisplayBubble(char, text)
+                end
+            else
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p.Name == senderName then
+                        local char = p.Character
+                        if char then
+                            TextChatService:DisplayBubble(char, text)
+                        end
+                        break
+                    end
+                end
+            end
+        end)
+    end
+    -- ─────────────────────────────────────────────────────────────────────────────
+
+    local function addMessage(sender, text, labelColor, nameHex, skipScroll, replyTo)
+        local isChat   = nameHex ~= nil
+        local hasReply = isChat and replyTo and type(replyTo) == "table"
+
+        -- Outer container (always transparent, always full messageList width)
+        local container = Instance.new("Frame")
+        container.Size = UDim2.new(1, 0, 0, 0)
+        container.AutomaticSize = Enum.AutomaticSize.Y
+        container.BackgroundTransparency = 1
+        container.BorderSizePixel = 0
+        container.Parent = messageList
+
+        -- Bubble: bordered box wrapping quote + message (only when reply exists)
+        local contentParent = container
+        if hasReply then
+            local bubble = Instance.new("Frame")
+            bubble.Size = UDim2.new(1, 0, 0, 0)
+            bubble.AutomaticSize = Enum.AutomaticSize.Y
+            bubble.BackgroundColor3 = Color3.fromRGB(28, 30, 35)
+            bubble.BackgroundTransparency = 0.5
+            bubble.BorderSizePixel = 0
+            bubble.Parent = container
+            Instance.new("UICorner", bubble).CornerRadius = UDim.new(0, 8)
+            local stroke = Instance.new("UIStroke")
+            stroke.Color = Color3.fromRGB(255, 255, 255)
+            stroke.Transparency = 0.82
+            stroke.Thickness = 1
+            stroke.Parent = bubble
+            local bLayout = Instance.new("UIListLayout")
+            bLayout.SortOrder = Enum.SortOrder.LayoutOrder
+            bLayout.Padding = UDim.new(0, 2)
+            bLayout.Parent = bubble
+            -- NO PaddingRight so bubble fills full container width
+            local bPad = Instance.new("UIPadding")
+            bPad.PaddingLeft   = UDim.new(0, 4)
+            bPad.PaddingRight  = UDim.new(0, 0)
+            bPad.PaddingTop    = UDim.new(0, 3)
+            bPad.PaddingBottom = UDim.new(0, 3)
+            bPad.Parent = bubble
+            contentParent = bubble
+        end
+
+        -- Quote block (inside bubble)
+        if hasReply then
+            local quoteBar = Instance.new("Frame")
+            quoteBar.Size = UDim2.new(1, 0, 0, 0)
+            quoteBar.AutomaticSize = Enum.AutomaticSize.Y
+            quoteBar.BackgroundColor3 = Color3.fromRGB(50, 52, 58)
+            quoteBar.BackgroundTransparency = 0.35
+            quoteBar.BorderSizePixel = 0
+            quoteBar.LayoutOrder = 1
+            quoteBar.Parent = contentParent
+            Instance.new("UICorner", quoteBar).CornerRadius = UDim.new(0, 5)
+
+            -- Stripe at x=0 of quoteBar — NOT a child of any padded container
+            local leftStripe = Instance.new("Frame")
+            leftStripe.Size = UDim2.new(0, 3, 1, 0)
+            leftStripe.Position = UDim2.new(0, 0, 0, 0)
+            leftStripe.BackgroundTransparency = 0
+            leftStripe.BorderSizePixel = 0
+            local okHex, hexClr = pcall(Color3.fromHex, replyTo.nameHex or "#AAAAAA")
+            leftStripe.BackgroundColor3 = okHex and hexClr or Color3.fromRGB(170, 170, 180)
+            leftStripe.Parent = quoteBar
+            Instance.new("UICorner", leftStripe).CornerRadius = UDim.new(0, 2)
+
+            -- Inner frame for text: starts at x=4 (after stripe+gap), has its own padding
+            local qInner = Instance.new("Frame")
+            qInner.Size = UDim2.new(1, -4, 0, 0)
+            qInner.Position = UDim2.new(0, 4, 0, 0)
+            qInner.AutomaticSize = Enum.AutomaticSize.Y
+            qInner.BackgroundTransparency = 1
+            qInner.BorderSizePixel = 0
+            qInner.Parent = quoteBar
+            local qPad = Instance.new("UIPadding")
+            qPad.PaddingLeft   = UDim.new(0, 5)
+            qPad.PaddingRight  = UDim.new(0, 4)
+            qPad.PaddingTop    = UDim.new(0, 3)
+            qPad.PaddingBottom = UDim.new(0, 3)
+            qPad.Parent = qInner
+            local quoteLabel = Instance.new("TextLabel")
+            quoteLabel.Size = UDim2.new(1, 0, 0, 0)
+            quoteLabel.AutomaticSize = Enum.AutomaticSize.Y
+            quoteLabel.BackgroundTransparency = 1
+            quoteLabel.Font = Enum.Font.Gotham
+            quoteLabel.TextSize = 12
+            quoteLabel.TextColor3 = Color3.fromRGB(165, 165, 180)
+            quoteLabel.TextXAlignment = Enum.TextXAlignment.Left
+            quoteLabel.RichText = true
+            quoteLabel.TextWrapped = true
+            local qtext = #replyTo.text > 80 and string.sub(replyTo.text, 1, 80) .. "\u{2026}" or replyTo.text
+            quoteLabel.Text = "<b><font color='" .. (replyTo.nameHex or "#AAAAAA") .. "'>" .. (replyTo.name or "?") .. "</font>:</b> " .. qtext
+            quoteLabel.Parent = qInner
+        end
+
+        -- Message label
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 0, 0)
+        label.AutomaticSize = Enum.AutomaticSize.Y
+        label.BackgroundTransparency = 1
+        label.Font = Enum.Font.Gotham
+        label.TextSize = 14
+        label.TextColor3 = labelColor or Color3.new(1, 1, 1)
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.RichText = true
+        label.TextWrapped = true
+        label.LayoutOrder = 2
+        if nameHex then
+            label.Text = "<b><font color='" .. nameHex .. "'>" .. sender .. "</font>:</b> " .. text
+        else
+            label.Text = "<b>" .. sender .. ":</b> " .. text
+        end
+        if isChat then
+            -- Reserve space on the right for buttons (buttons are in container, not label)
+            local lPad = Instance.new("UIPadding")
+            lPad.PaddingRight = UDim.new(0, 42)
+            lPad.Parent = label
+        end
+        label.Parent = contentParent
+
+        -- Action buttons: children of CONTAINER so they're always at the right edge
+        -- regardless of bubble padding. AnchorPoint=(1,0) = right-aligned.
+        if isChat then
+            local copyBtn = Instance.new("TextButton")
+            copyBtn.Size = UDim2.fromOffset(18, 18)
+            copyBtn.Position = UDim2.new(1, -2, 0, 2)
+            copyBtn.AnchorPoint = Vector2.new(1, 0)
+            copyBtn.BackgroundTransparency = 1
+            copyBtn.Text = "📋"
+            copyBtn.TextSize = 13
+            copyBtn.Font = Enum.Font.GothamBold
+            copyBtn.TextColor3 = Color3.fromRGB(110, 110, 120)
+            copyBtn.TextTransparency = 1
+            copyBtn.AutoButtonColor = false
+            copyBtn.BorderSizePixel = 0
+            copyBtn.ZIndex = 5
+            local copyText = sender .. ": " .. text
+            copyBtn.MouseButton1Click:Connect(function()
+                pcall(function() setclipboard(copyText) end)
+            end)
+            copyBtn.Parent = container
+
+            local replyBtn = Instance.new("ImageButton")
+            replyBtn.Size = UDim2.fromOffset(18, 18)
+            replyBtn.Position = UDim2.new(1, -22, 0, 2)
+            replyBtn.AnchorPoint = Vector2.new(1, 0)
+            replyBtn.BackgroundTransparency = 1
+            replyBtn.Image = "rbxassetid://107044600796242"
+            replyBtn.ImageTransparency = 1
+            replyBtn.AutoButtonColor = false
+            replyBtn.BorderSizePixel = 0
+            replyBtn.ZIndex = 5
+            replyBtn.Parent = container
+            replyBtn.MouseButton1Click:Connect(function()
+                setReplyTarget(sender, text, nameHex)
+            end)
+
+            local function showBtns()
+                copyBtn.TextTransparency = 0
+                replyBtn.ImageTransparency = 0.1
+            end
+            local function hideBtns()
+                copyBtn.TextTransparency = 1
+                replyBtn.ImageTransparency = 1
+            end
+
+            -- PC hover
+            container.MouseEnter:Connect(showBtns)
+            container.MouseLeave:Connect(hideBtns)
+
+            -- Mobile: tap toggles buttons
+            local mobileShown = false
+            container.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.Touch then
+                    if mobileShown then
+                        hideBtns()
+                        mobileShown = false
+                    else
+                        showBtns()
+                        mobileShown = true
+                    end
+                end
+            end)
+        end
+
+        if not chatWindow.Visible then
+            hasUnread = true
+            updateChatIcon()
+        end
+        if not skipScroll then
+            task.wait()
+            messageList.CanvasPosition = Vector2.new(0, messageList.AbsoluteCanvasSize.Y)
+            updateScrollThumb()
+        end
+        -- show bubble above the player's head (skip history replay)
+        if isChat and not skipScroll then
+            displayBubbleForPlayer(sender, text)
+        end
+    end
+
+    local function onSend()
+        local text = chatInput.Text
+        if text == "" or text:match("^%s*$") then return end
+        local currentReply = replyTarget
+        addMessage(LocalPlayer.Name, text, nil, myColorHex, false, currentReply)
+        chatInput.Text = ""
+        clearReplyTarget()
+        if wsConnected and ws then
+            pcall(function()
+                local payload = { type = "chat", text = text }
+                if currentReply then
+                    payload.replyTo = {
+                        name    = currentReply.name,
+                        text    = currentReply.text,
+                        nameHex = currentReply.nameHex,
+                    }
+                end
+                ws:Send(HttpService:JSONEncode(payload))
+            end)
+        end
+    end
+
+    sendHitbox.MouseButton1Click:Connect(onSend)
+    chatInput.FocusLost:Connect(function(enterPressed)
+        if enterPressed then onSend() end
+    end)
+
+    chatInput:GetPropertyChangedSignal("Text"):Connect(function()
+        local text = chatInput.Text
+        if #text > 200 then
+            local cursorPosition = chatInput.CursorPosition
+            chatInput.Text = string.sub(text, 1, 200)
+            if cursorPosition > 0 then
+                chatInput.CursorPosition = math.min(cursorPosition, 201)
+            end
+        end
+        resetActivityTimer()
+    end)
+
+    chatInput.Focused:Connect(resetActivityTimer)
+    chatWindow.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            resetActivityTimer()
+        end
+    end)
+
+    messageList:GetPropertyChangedSignal("CanvasPosition"):Connect(updateScrollThumb)
+    messageList:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(updateScrollThumb)
+    messageList:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(updateScrollThumb)
+    chatWindow:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateScrollThumb)
+
+    scrollThumb.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDraggingScrollThumb = true
+            scrollActiveInput     = input
+            scrollThumbDragStart  = input.Position
+            scrollThumbStartY     = scrollThumb.Position.Y.Offset
+            resetActivityTimer()
+        end
+    end)
+
+    scrollTrack.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            setScrollFromThumb(input.Position.Y - scrollTrack.AbsolutePosition.Y - (scrollThumb.AbsoluteSize.Y / 2))
+            resetActivityTimer()
+        end
+    end)
+
+    task.spawn(function()
+        while task.wait(1) do
+            if chatWindow.Visible and not isCollapsed and tick() - lastActivityTime >= 30 then
+                isCollapsed = true
+                setContentTransparency(1)
+            end
+        end
+    end)
+
+    local resizeHandle = Instance.new("Frame")
+    resizeHandle.Size = UDim2.new(0, 32, 0, 32)
+    resizeHandle.Position = UDim2.new(1, 0, 1, 0)
+    resizeHandle.AnchorPoint = Vector2.new(0.5, 0.5)
+    resizeHandle.BackgroundTransparency = 1
+    resizeHandle.ZIndex = 99
+    resizeHandle.Active = true
+    resizeHandle.Parent = chatWindow
+
+    local resizeImage = Instance.new("ImageLabel")
+    resizeImage.Size = UDim2.new(0, 96, 0, 96)
+    resizeImage.BackgroundTransparency = 1
+    resizeImage.Image = "rbxassetid://120997033468887"
+    resizeImage.Position = UDim2.new(0.5, -16, 0.5, -16)
+    resizeImage.AnchorPoint = Vector2.new(0.5, 0.5)
+    resizeImage.ImageTransparency = 1
+    resizeImage.Parent = resizeHandle
+
+    local isResizing = false
+
+    resizeHandle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isResizing = true
+            resizeActiveInput = input
+            TweenService:Create(resizeImage, TweenInfo.new(0.1), { ImageTransparency = 0.35 }):Play()
+            resetActivityTimer()
+        end
+    end)
+
+    resizeHandle.MouseEnter:Connect(function()
         TweenService:Create(resizeImage, TweenInfo.new(0.3,
             Enum.EasingStyle.Exponential, Enum.EasingDirection.Out),
-            { ImageTransparency = 1 }):Play()
-    end
-end)
+            { ImageTransparency = 0.8 }):Play()
+    end)
 
-UserInputService.InputChanged:Connect(function(input)
-    local isMoveEvent = input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch
-    if isDraggingScrollThumb and isMoveEvent
-    and (input.UserInputType == Enum.UserInputType.MouseMovement or input == scrollActiveInput) then
-        setScrollFromThumb(scrollThumbStartY + (input.Position.Y - scrollThumbDragStart.Y))
-        resetActivityTimer()
-    end
-    if isResizing and isMoveEvent
-    and (input.UserInputType == Enum.UserInputType.MouseMovement or input == resizeActiveInput) then
-        resetActivityTimer()
-        local mousePos = input.Position
-        local viewport = workspace.CurrentCamera.ViewportSize
-        local winPos   = chatWindow.AbsolutePosition
-        chatWindow.Size = UDim2.new(0,
-            math.clamp(mousePos.X - winPos.X, 280, math.min(800, viewport.X - winPos.X)),
-            0,
-            math.clamp(mousePos.Y - winPos.Y, 140, math.min(600, viewport.Y - winPos.Y))
-        )
-        lastSize = chatWindow.Size
-        updateScrollThumb()
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        if isResizing then
-            TweenService:Create(resizeImage, TweenInfo.new(0.17), { ImageTransparency = 1 }):Play()
+    resizeHandle.MouseLeave:Connect(function()
+        if not isResizing then
+            TweenService:Create(resizeImage, TweenInfo.new(0.3,
+                Enum.EasingStyle.Exponential, Enum.EasingDirection.Out),
+                { ImageTransparency = 1 }):Play()
         end
-        isDraggingScrollThumb = false
-        scrollActiveInput = nil
-        resizeActiveInput = nil
-        isResizing = false
-    end
-end)
+    end)
 
-local function openChat(shouldFocusInput)
-    chatWindow.BackgroundTransparency = 0.3
-    chatWindow.AnchorPoint = lastAnchor
-    chatWindow.Position    = lastPosition
-    chatWindow.Size        = lastSize
-    chatWindow.Visible = true
-    hasUnread = false
-    updateChatIcon()
-    isCollapsed = false
-    setContentTransparency(0)
-    resetActivityTimer()
-    updateScrollThumb()
-    if shouldFocusInput then
-        task.wait(0.05)
-        chatInput:CaptureFocus()
-    end
-end
-
-local function closeChat()
-    chatWindow.Visible = false
-    updateChatIcon()
-end
-
-chatIcon.MouseButton1Click:Connect(function()
-    if not chatWindow.Visible then openChat(false) else closeChat() end
-end)
-
-closeButton.MouseButton1Click:Connect(closeChat)
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == Enum.KeyCode.Comma then
-        if not chatWindow.Visible then
-            openChat(true)
-        else
+    UserInputService.InputChanged:Connect(function(input)
+        local isMoveEvent = input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch
+        if isDraggingScrollThumb and isMoveEvent
+        and (input.UserInputType == Enum.UserInputType.MouseMovement or input == scrollActiveInput) then
+            setScrollFromThumb(scrollThumbStartY + (input.Position.Y - scrollThumbDragStart.Y))
             resetActivityTimer()
+        end
+        if isResizing and isMoveEvent
+        and (input.UserInputType == Enum.UserInputType.MouseMovement or input == resizeActiveInput) then
+            resetActivityTimer()
+            local mousePos = input.Position
+            local viewport = workspace.CurrentCamera.ViewportSize
+            local winPos   = chatWindow.AbsolutePosition
+            chatWindow.Size = UDim2.new(0,
+                math.clamp(mousePos.X - winPos.X, 280, math.min(800, viewport.X - winPos.X)),
+                0,
+                math.clamp(mousePos.Y - winPos.Y, 140, math.min(600, viewport.Y - winPos.Y))
+            )
+            lastSize = chatWindow.Size
+            updateScrollThumb()
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if isResizing then
+                TweenService:Create(resizeImage, TweenInfo.new(0.17), { ImageTransparency = 1 }):Play()
+            end
+            isDraggingScrollThumb = false
+            scrollActiveInput = nil
+            resizeActiveInput = nil
+            isResizing = false
+        end
+    end)
+
+    local function openChat(shouldFocusInput)
+        chatWindow.BackgroundTransparency = 0.3
+        chatWindow.AnchorPoint = lastAnchor
+        chatWindow.Position    = lastPosition
+        chatWindow.Size        = lastSize
+        chatWindow.Visible = true
+        hasUnread = false
+        updateChatIcon()
+        isCollapsed = false
+        setContentTransparency(0)
+        resetActivityTimer()
+        updateScrollThumb()
+        if shouldFocusInput then
+            task.wait(0.05)
             chatInput:CaptureFocus()
         end
     end
-end)
 
-local dragging = false
-local dragStart
-local dragWindowStart
-
-chatWindow.InputBegan:Connect(function(input)
-    if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
-    and not isResizing and not isDraggingScrollThumb and not serverListDragging and not serverListResizing then
-        dragging = true
-        dragActiveInput = input
-        dragStart = input.Position
-        dragWindowStart = chatWindow.AbsolutePosition
-        resetActivityTimer()
+    local function closeChat()
+        chatWindow.Visible = false
+        updateChatIcon()
     end
-end)
 
-UserInputService.InputChanged:Connect(function(input)
-    local isDragMove = dragging and (
-        input.UserInputType == Enum.UserInputType.MouseMovement
-        or (input.UserInputType == Enum.UserInputType.Touch and input == dragActiveInput)
-    )
-    if not isDragMove then return end
-    local delta    = input.Position - dragStart
-    local viewport = workspace.CurrentCamera.ViewportSize
-    local winSize  = chatWindow.AbsoluteSize
-    chatWindow.AnchorPoint = Vector2.new(0, 0)
-    chatWindow.Position = UDim2.fromOffset(
-        math.clamp(dragWindowStart.X + delta.X, 0, viewport.X - winSize.X),
-        math.clamp(dragWindowStart.Y + delta.Y, 0, viewport.Y - winSize.Y)
-    )
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        if dragging then
-            lastPosition = chatWindow.Position
-            lastAnchor   = chatWindow.AnchorPoint
-        end
-        dragging   = false
-        dragActiveInput = nil
-        isResizing = false
-        isDraggingScrollThumb = false
-    end
-end)
-
--- ── Server List Window ────────────────────────────────────────────────────────
-local serverListWindow = Instance.new("Frame")
-serverListWindow.Name = "ServerListWindow"
-serverListWindow.BackgroundColor3 = Color3.fromRGB(25, 27, 29)
-serverListWindow.BackgroundTransparency = 0.3
-serverListWindow.BorderSizePixel = 0
-serverListWindow.Visible = false
-serverListWindow.Active = true
-serverListWindow.ClipsDescendants = false
-serverListWindow.Parent = screenGui
-Instance.new("UICorner", serverListWindow).CornerRadius = UDim.new(0, 15)
-
-local slHeader = Instance.new("TextLabel")
-slHeader.Size = UDim2.new(1, -52, 0, 30)
-slHeader.Position = UDim2.new(0, 8, 0, 4)
-slHeader.BackgroundTransparency = 1
-slHeader.Text = "SERVER LIST (delta & krnl don't support)"
-slHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
-slHeader.TextSize = 13
-slHeader.Font = Enum.Font.GothamBold
-slHeader.TextXAlignment = Enum.TextXAlignment.Left
-slHeader.Parent = serverListWindow
-
-local slCloseBtn = Instance.new("ImageButton")
-slCloseBtn.Image = "rbxassetid://102770163148417"
-slCloseBtn.Size = UDim2.new(0, 22, 0, 22)
-slCloseBtn.Position = UDim2.new(1, -28, 0, 6)
-slCloseBtn.BackgroundTransparency = 1
-slCloseBtn.Parent = serverListWindow
-
-local slDivider = Instance.new("Frame")
-slDivider.Size = UDim2.new(1, -16, 0, 1)
-slDivider.Position = UDim2.new(0, 8, 0, 34)
-slDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-slDivider.BackgroundTransparency = 0.85
-slDivider.BorderSizePixel = 0
-slDivider.Parent = serverListWindow
-
-local slScrollFrame = Instance.new("ScrollingFrame")
-slScrollFrame.Size = UDim2.new(1, -16, 1, -44)
-slScrollFrame.Position = UDim2.new(0, 8, 0, 42)
-slScrollFrame.BackgroundTransparency = 1
-slScrollFrame.BorderSizePixel = 0
-slScrollFrame.ScrollBarThickness = 0
-slScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-slScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
-slScrollFrame.Parent = serverListWindow
-
-local slListLayout = Instance.new("UIListLayout")
-slListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-slListLayout.Padding = UDim.new(0, 4)
-slListLayout.Parent = slScrollFrame
-
-local slScrollPadding = Instance.new("UIPadding")
-slScrollPadding.PaddingLeft   = UDim.new(0, 3)
-slScrollPadding.PaddingRight  = UDim.new(0, 3)
-slScrollPadding.PaddingTop    = UDim.new(0, 3)
-slScrollPadding.PaddingBottom = UDim.new(0, 3)
-slScrollPadding.Parent = slScrollFrame
-
-local slScrollTrack = Instance.new("Frame")
-slScrollTrack.Name = "SlScrollTrack"
-slScrollTrack.Size = UDim2.new(0, 4, 1, -44)
-slScrollTrack.Position = UDim2.new(1, -6, 0, 42)
-slScrollTrack.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-slScrollTrack.BackgroundTransparency = 0.85
-slScrollTrack.BorderSizePixel = 0
-slScrollTrack.Visible = false
-slScrollTrack.Parent = serverListWindow
-Instance.new("UICorner", slScrollTrack).CornerRadius = UDim.new(1, 0)
-
-local slScrollThumb = Instance.new("Frame")
-slScrollThumb.Name = "SlScrollThumb"
-slScrollThumb.Size = UDim2.new(1, 0, 0, 24)
-slScrollThumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-slScrollThumb.BackgroundTransparency = 0.35
-slScrollThumb.BorderSizePixel = 0
-slScrollThumb.Parent = slScrollTrack
-Instance.new("UICorner", slScrollThumb).CornerRadius = UDim.new(1, 0)
-
-local slResizeHandle = Instance.new("Frame")
-slResizeHandle.Size = UDim2.new(0, 32, 0, 32)
-slResizeHandle.Position = UDim2.new(1, 0, 1, 0)
-slResizeHandle.AnchorPoint = Vector2.new(0.5, 0.5)
-slResizeHandle.BackgroundTransparency = 1
-slResizeHandle.ZIndex = 99
-slResizeHandle.Active = true
-slResizeHandle.Parent = serverListWindow
-
-local slResizeImage = Instance.new("ImageLabel")
-slResizeImage.Size = UDim2.new(0, 96, 0, 96)
-slResizeImage.BackgroundTransparency = 1
-slResizeImage.Image = "rbxassetid://120997033468887"
-slResizeImage.Position = UDim2.new(0.5, -16, 0.5, -16)
-slResizeImage.AnchorPoint = Vector2.new(0.5, 0.5)
-slResizeImage.ImageTransparency = 1
-slResizeImage.Parent = slResizeHandle
-
-local function slUpdateScrollThumb()
-    local canvasHeight = slScrollFrame.AbsoluteCanvasSize.Y
-    local viewHeight   = slScrollFrame.AbsoluteWindowSize.Y
-    local trackHeight  = slScrollTrack.AbsoluteSize.Y
-    if viewHeight <= 0 or trackHeight <= 0 or canvasHeight <= viewHeight then
-        slScrollTrack.Visible = false
-        slScrollThumb.Position = UDim2.fromOffset(0, 0)
-        slScrollThumb.Size = UDim2.new(1, 0, 1, 0)
-        return
-    end
-    slScrollTrack.Visible = true
-    local thumbHeight = math.clamp(math.floor((viewHeight / canvasHeight) * trackHeight), 24, trackHeight)
-    local maxCanvasY  = math.max(0, canvasHeight - viewHeight)
-    local scrollRatio = maxCanvasY > 0 and (slScrollFrame.CanvasPosition.Y / maxCanvasY) or 0
-    local maxThumbY   = math.max(0, trackHeight - thumbHeight)
-    local thumbY      = math.floor(maxThumbY * math.clamp(scrollRatio, 0, 1))
-    slScrollThumb.Size     = UDim2.new(1, 0, 0, thumbHeight)
-    slScrollThumb.Position = UDim2.fromOffset(0, thumbY)
-end
-
-local function slSetScrollFromThumb(offsetY)
-    local trackHeight  = slScrollTrack.AbsoluteSize.Y
-    local thumbHeight  = slScrollThumb.AbsoluteSize.Y
-    local canvasHeight = slScrollFrame.AbsoluteCanvasSize.Y
-    local viewHeight   = slScrollFrame.AbsoluteWindowSize.Y
-    local maxThumbY    = math.max(0, trackHeight - thumbHeight)
-    local maxCanvasY   = math.max(0, canvasHeight - viewHeight)
-    if maxThumbY <= 0 or maxCanvasY <= 0 then
-        slScrollFrame.CanvasPosition = Vector2.new(0, 0)
-        return
-    end
-    slScrollFrame.CanvasPosition = Vector2.new(0, math.floor(maxCanvasY * math.clamp(offsetY / maxThumbY, 0, 1)))
-end
-
-local function updateServerListUI(serverData)
-    for _, child in ipairs(slScrollFrame:GetChildren()) do
-        if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end
-    end
-    if type(serverData) ~= "table" then return end
-    local myJobId = tostring(getgenv().haha or "")
-    table.sort(serverData, function(a, b)
-        local aC = tostring(a.jobId or "") == myJobId
-        local bC = tostring(b.jobId or "") == myJobId
-        if aC ~= bC then return aC end
-        return (tonumber(a.count) or 0) > (tonumber(b.count) or 0)
+    chatIcon.MouseButton1Click:Connect(function()
+        if not chatWindow.Visible then openChat(false) else closeChat() end
     end)
-    local frameWidth = slScrollFrame.AbsoluteSize.X
-    if frameWidth <= 10 then
-        frameWidth = serverListLastSize.X.Offset - 22
-    end
-    local maxAvatars = math.max(0, math.floor((frameWidth - 130) / 27))
-    for i, entry in ipairs(serverData) do
-        local jobId = tostring(entry.jobId or "")
-        local count = tonumber(entry.count) or 0
-        local clientList = type(entry.clients) == "table" and entry.clients or {}
-        local isCurrentServer = (jobId == myJobId)
-        local row = Instance.new("Frame")
-        row.Size = UDim2.new(1, 0, 0, 40)
-        row.BackgroundColor3 = Color3.fromRGB(35, 37, 40)
-        row.BackgroundTransparency = 0.5
-        row.BorderSizePixel = 0
-        row.LayoutOrder = i
-        row.Parent = slScrollFrame
-        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
-        if isCurrentServer then
-            local stroke = Instance.new("UIStroke")
-            stroke.Thickness = 2
-            stroke.Color = Color3.fromRGB(40, 180, 60)
-            stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-            stroke.Parent = row
+
+    closeButton.MouseButton1Click:Connect(closeChat)
+
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if not gameProcessed and input.KeyCode == Enum.KeyCode.Comma then
+            if not chatWindow.Visible then
+                openChat(true)
+            else
+                resetActivityTimer()
+                chatInput:CaptureFocus()
+            end
         end
-        local indexLabel = Instance.new("TextLabel")
-        indexLabel.Size = UDim2.new(0, 22, 1, 0)
-        indexLabel.Position = UDim2.new(0, 8, 0, 0)
-        indexLabel.BackgroundTransparency = 1
-        indexLabel.Text = tostring(i) .. "."
-        indexLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-        indexLabel.TextSize = 13
-        indexLabel.Font = Enum.Font.Gotham
-        indexLabel.TextXAlignment = Enum.TextXAlignment.Left
-        indexLabel.TextYAlignment = Enum.TextYAlignment.Center
-        indexLabel.Parent = row
-        -- inline container: countLabel + avatars side by side
-        local infoRow = Instance.new("Frame")
-        infoRow.Size = UDim2.new(1, -130, 1, 0)
-        infoRow.Position = UDim2.new(0, 36, 0, 0)
-        infoRow.BackgroundTransparency = 1
-        infoRow.ClipsDescendants = true
-        infoRow.Parent = row
-        local infoLayout = Instance.new("UIListLayout")
-        infoLayout.FillDirection = Enum.FillDirection.Horizontal
-        infoLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-        infoLayout.Padding = UDim.new(0, 6)
-        infoLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        infoLayout.Parent = infoRow
-        local countLabel = Instance.new("TextLabel")
-        countLabel.Size = UDim2.fromOffset(0, 28)
-        countLabel.AutomaticSize = Enum.AutomaticSize.X
-        countLabel.BackgroundTransparency = 1
-        countLabel.Text = tostring(count) .. (count == 1 and " client" or " client's")
-        countLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        countLabel.TextSize = 14
-        countLabel.Font = Enum.Font.GothamBold
-        countLabel.TextXAlignment = Enum.TextXAlignment.Left
-        countLabel.TextYAlignment = Enum.TextYAlignment.Center
-        countLabel.LayoutOrder = 1
-        countLabel.Parent = infoRow
-        if maxAvatars > 0 and #clientList > 0 then
-            local shown = math.min(#clientList, maxAvatars)
-            local avatarStrip = Instance.new("Frame")
-            avatarStrip.Size = UDim2.fromOffset(shown * 24 + (shown - 1) * 7, 24)
-            avatarStrip.BackgroundTransparency = 1
-            avatarStrip.LayoutOrder = 2
-            avatarStrip.Parent = infoRow
-            local avatarLayout = Instance.new("UIListLayout")
-            avatarLayout.FillDirection = Enum.FillDirection.Horizontal
-            avatarLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-            avatarLayout.Padding = UDim.new(0, 7)
-            avatarLayout.SortOrder = Enum.SortOrder.LayoutOrder
-            avatarLayout.Parent = avatarStrip
-            for j, clientInfo in ipairs(clientList) do
-                if j > maxAvatars then break end
-                local userId = tonumber(clientInfo.userId)
-                if not userId then continue end
-                local avatarColor = tostring(clientInfo.color or "#FFFFFF")
-                local r = tonumber("0x" .. avatarColor:sub(2,3)) or 255
-                local g = tonumber("0x" .. avatarColor:sub(4,5)) or 255
-                local b = tonumber("0x" .. avatarColor:sub(6,7)) or 255
-                local img = Instance.new("ImageLabel")
-                img.Size = UDim2.fromOffset(24, 24)
-                img.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
-                img.BackgroundTransparency = 0.3
-                img.BorderSizePixel = 0
-                img.LayoutOrder = j
-                img.Parent = avatarStrip
-                Instance.new("UICorner", img).CornerRadius = UDim.new(1, 0)
+    end)
+
+    local dragging = false
+    local dragStart
+    local dragWindowStart
+
+    chatWindow.InputBegan:Connect(function(input)
+        if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
+        and not isResizing and not isDraggingScrollThumb and not serverListDragging and not serverListResizing then
+            dragging = true
+            dragActiveInput = input
+            dragStart = input.Position
+            dragWindowStart = chatWindow.AbsolutePosition
+            resetActivityTimer()
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        local isDragMove = dragging and (
+            input.UserInputType == Enum.UserInputType.MouseMovement
+            or (input.UserInputType == Enum.UserInputType.Touch and input == dragActiveInput)
+        )
+        if not isDragMove then return end
+        local delta    = input.Position - dragStart
+        local viewport = workspace.CurrentCamera.ViewportSize
+        local winSize  = chatWindow.AbsoluteSize
+        chatWindow.AnchorPoint = Vector2.new(0, 0)
+        chatWindow.Position = UDim2.fromOffset(
+            math.clamp(dragWindowStart.X + delta.X, 0, viewport.X - winSize.X),
+            math.clamp(dragWindowStart.Y + delta.Y, 0, viewport.Y - winSize.Y)
+        )
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if dragging then
+                lastPosition = chatWindow.Position
+                lastAnchor   = chatWindow.AnchorPoint
+            end
+            dragging   = false
+            dragActiveInput = nil
+            isResizing = false
+            isDraggingScrollThumb = false
+        end
+    end)
+
+    -- ── Server List Window ────────────────────────────────────────────────────────
+    local serverListWindow = Instance.new("Frame")
+    serverListWindow.Name = "ServerListWindow"
+    serverListWindow.BackgroundColor3 = Color3.fromRGB(25, 27, 29)
+    serverListWindow.BackgroundTransparency = 0.3
+    serverListWindow.BorderSizePixel = 0
+    serverListWindow.Visible = false
+    serverListWindow.Active = true
+    serverListWindow.ClipsDescendants = false
+    serverListWindow.Parent = screenGui
+    Instance.new("UICorner", serverListWindow).CornerRadius = UDim.new(0, 15)
+
+    local slHeader = Instance.new("TextLabel")
+    slHeader.Size = UDim2.new(1, -52, 0, 30)
+    slHeader.Position = UDim2.new(0, 8, 0, 4)
+    slHeader.BackgroundTransparency = 1
+    slHeader.Text = "SERVER LIST (delta & krnl don't support)"
+    slHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
+    slHeader.TextSize = 13
+    slHeader.Font = Enum.Font.GothamBold
+    slHeader.TextXAlignment = Enum.TextXAlignment.Left
+    slHeader.Parent = serverListWindow
+
+    local slCloseBtn = Instance.new("ImageButton")
+    slCloseBtn.Image = "rbxassetid://102770163148417"
+    slCloseBtn.Size = UDim2.new(0, 22, 0, 22)
+    slCloseBtn.Position = UDim2.new(1, -28, 0, 6)
+    slCloseBtn.BackgroundTransparency = 1
+    slCloseBtn.Parent = serverListWindow
+
+    local slDivider = Instance.new("Frame")
+    slDivider.Size = UDim2.new(1, -16, 0, 1)
+    slDivider.Position = UDim2.new(0, 8, 0, 34)
+    slDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    slDivider.BackgroundTransparency = 0.85
+    slDivider.BorderSizePixel = 0
+    slDivider.Parent = serverListWindow
+
+    local slScrollFrame = Instance.new("ScrollingFrame")
+    slScrollFrame.Size = UDim2.new(1, -16, 1, -44)
+    slScrollFrame.Position = UDim2.new(0, 8, 0, 42)
+    slScrollFrame.BackgroundTransparency = 1
+    slScrollFrame.BorderSizePixel = 0
+    slScrollFrame.ScrollBarThickness = 0
+    slScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    slScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    slScrollFrame.Parent = serverListWindow
+
+    local slListLayout = Instance.new("UIListLayout")
+    slListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    slListLayout.Padding = UDim.new(0, 4)
+    slListLayout.Parent = slScrollFrame
+
+    local slScrollPadding = Instance.new("UIPadding")
+    slScrollPadding.PaddingLeft   = UDim.new(0, 3)
+    slScrollPadding.PaddingRight  = UDim.new(0, 3)
+    slScrollPadding.PaddingTop    = UDim.new(0, 3)
+    slScrollPadding.PaddingBottom = UDim.new(0, 3)
+    slScrollPadding.Parent = slScrollFrame
+
+    local slScrollTrack = Instance.new("Frame")
+    slScrollTrack.Name = "SlScrollTrack"
+    slScrollTrack.Size = UDim2.new(0, 4, 1, -44)
+    slScrollTrack.Position = UDim2.new(1, -6, 0, 42)
+    slScrollTrack.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    slScrollTrack.BackgroundTransparency = 0.85
+    slScrollTrack.BorderSizePixel = 0
+    slScrollTrack.Visible = false
+    slScrollTrack.Parent = serverListWindow
+    Instance.new("UICorner", slScrollTrack).CornerRadius = UDim.new(1, 0)
+
+    local slScrollThumb = Instance.new("Frame")
+    slScrollThumb.Name = "SlScrollThumb"
+    slScrollThumb.Size = UDim2.new(1, 0, 0, 24)
+    slScrollThumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    slScrollThumb.BackgroundTransparency = 0.35
+    slScrollThumb.BorderSizePixel = 0
+    slScrollThumb.Parent = slScrollTrack
+    Instance.new("UICorner", slScrollThumb).CornerRadius = UDim.new(1, 0)
+
+    local slResizeHandle = Instance.new("Frame")
+    slResizeHandle.Size = UDim2.new(0, 32, 0, 32)
+    slResizeHandle.Position = UDim2.new(1, 0, 1, 0)
+    slResizeHandle.AnchorPoint = Vector2.new(0.5, 0.5)
+    slResizeHandle.BackgroundTransparency = 1
+    slResizeHandle.ZIndex = 99
+    slResizeHandle.Active = true
+    slResizeHandle.Parent = serverListWindow
+
+    local slResizeImage = Instance.new("ImageLabel")
+    slResizeImage.Size = UDim2.new(0, 96, 0, 96)
+    slResizeImage.BackgroundTransparency = 1
+    slResizeImage.Image = "rbxassetid://120997033468887"
+    slResizeImage.Position = UDim2.new(0.5, -16, 0.5, -16)
+    slResizeImage.AnchorPoint = Vector2.new(0.5, 0.5)
+    slResizeImage.ImageTransparency = 1
+    slResizeImage.Parent = slResizeHandle
+
+    local function slUpdateScrollThumb()
+        local canvasHeight = slScrollFrame.AbsoluteCanvasSize.Y
+        local viewHeight   = slScrollFrame.AbsoluteWindowSize.Y
+        local trackHeight  = slScrollTrack.AbsoluteSize.Y
+        if viewHeight <= 0 or trackHeight <= 0 or canvasHeight <= viewHeight then
+            slScrollTrack.Visible = false
+            slScrollThumb.Position = UDim2.fromOffset(0, 0)
+            slScrollThumb.Size = UDim2.new(1, 0, 1, 0)
+            return
+        end
+        slScrollTrack.Visible = true
+        local thumbHeight = math.clamp(math.floor((viewHeight / canvasHeight) * trackHeight), 24, trackHeight)
+        local maxCanvasY  = math.max(0, canvasHeight - viewHeight)
+        local scrollRatio = maxCanvasY > 0 and (slScrollFrame.CanvasPosition.Y / maxCanvasY) or 0
+        local maxThumbY   = math.max(0, trackHeight - thumbHeight)
+        local thumbY      = math.floor(maxThumbY * math.clamp(scrollRatio, 0, 1))
+        slScrollThumb.Size     = UDim2.new(1, 0, 0, thumbHeight)
+        slScrollThumb.Position = UDim2.fromOffset(0, thumbY)
+    end
+
+    local function slSetScrollFromThumb(offsetY)
+        local trackHeight  = slScrollTrack.AbsoluteSize.Y
+        local thumbHeight  = slScrollThumb.AbsoluteSize.Y
+        local canvasHeight = slScrollFrame.AbsoluteCanvasSize.Y
+        local viewHeight   = slScrollFrame.AbsoluteWindowSize.Y
+        local maxThumbY    = math.max(0, trackHeight - thumbHeight)
+        local maxCanvasY   = math.max(0, canvasHeight - viewHeight)
+        if maxThumbY <= 0 or maxCanvasY <= 0 then
+            slScrollFrame.CanvasPosition = Vector2.new(0, 0)
+            return
+        end
+        slScrollFrame.CanvasPosition = Vector2.new(0, math.floor(maxCanvasY * math.clamp(offsetY / maxThumbY, 0, 1)))
+    end
+
+    local function updateServerListUI(serverData)
+        local savedScrollY = slScrollFrame.CanvasPosition.Y
+        for _, child in ipairs(slScrollFrame:GetChildren()) do
+            if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end
+        end
+        if type(serverData) ~= "table" then return end
+        local myJobId = tostring(getgenv().haha or "")
+        table.sort(serverData, function(a, b)
+            local aC = tostring(a.jobId or "") == myJobId
+            local bC = tostring(b.jobId or "") == myJobId
+            if aC ~= bC then return aC end
+            return (tonumber(a.count) or 0) > (tonumber(b.count) or 0)
+        end)
+        local frameWidth = slScrollFrame.AbsoluteSize.X
+        if frameWidth <= 10 then
+            frameWidth = serverListLastSize.X.Offset - 22
+        end
+        local maxAvatars = math.max(0, math.floor((frameWidth - 130) / 27))
+        for i, entry in ipairs(serverData) do
+            local jobId = tostring(entry.jobId or "")
+            local count = tonumber(entry.count) or 0
+            local clientList = type(entry.clients) == "table" and entry.clients or {}
+            local isCurrentServer = (jobId == myJobId)
+            local row = Instance.new("Frame")
+            row.Size = UDim2.new(1, 0, 0, 40)
+            row.BackgroundColor3 = Color3.fromRGB(35, 37, 40)
+            row.BackgroundTransparency = 0.5
+            row.BorderSizePixel = 0
+            row.LayoutOrder = i
+            row.Parent = slScrollFrame
+            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+            if isCurrentServer then
                 local stroke = Instance.new("UIStroke")
                 stroke.Thickness = 2
-                stroke.Color = Color3.fromRGB(r, g, b)
+                stroke.Color = Color3.fromRGB(40, 180, 60)
                 stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-                stroke.Parent = img
-                local capturedImg = img
-                task.spawn(function()
-                    local ok2, url = pcall(function()
-                        return game:GetService("Players"):GetUserThumbnailAsync(
-                            userId,
-                            Enum.ThumbnailType.HeadShot,
-                            Enum.ThumbnailSize.Size48x48
-                        )
-                    end)
-                    if ok2 and capturedImg.Parent then
-                        capturedImg.Image = url
-                    end
-                end)
+                stroke.Parent = row
             end
-        end
-        local joinBtn = Instance.new("TextButton")
-        joinBtn.Size = UDim2.new(0, 82, 0, 26)
-        joinBtn.Position = UDim2.new(1, -90, 0.5, 0)
-        joinBtn.AnchorPoint = Vector2.new(0, 0.5)
-        joinBtn.BackgroundColor3 = Color3.fromRGB(51, 95, 255)
-        joinBtn.BackgroundTransparency = 0
-        joinBtn.Text = isCurrentServer and "rejoin" or "join"
-        joinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        joinBtn.TextSize = 13
-        joinBtn.Font = Enum.Font.GothamBold
-        joinBtn.AutoButtonColor = true
-        joinBtn.Parent = row
-        Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 8)
-        local capturedJobId = jobId
-        joinBtn.MouseButton1Click:Connect(function()
-            pcall(function()
-                game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, capturedJobId)
+            local indexLabel = Instance.new("TextLabel")
+            indexLabel.Size = UDim2.new(0, 22, 1, 0)
+            indexLabel.Position = UDim2.new(0, 8, 0, 0)
+            indexLabel.BackgroundTransparency = 1
+            indexLabel.Text = tostring(i) .. "."
+            indexLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+            indexLabel.TextSize = 13
+            indexLabel.Font = Enum.Font.Gotham
+            indexLabel.TextXAlignment = Enum.TextXAlignment.Left
+            indexLabel.TextYAlignment = Enum.TextYAlignment.Center
+            indexLabel.Parent = row
+            -- inline container: countLabel + avatars side by side
+            local infoRow = Instance.new("Frame")
+            infoRow.Size = UDim2.new(1, -130, 1, 0)
+            infoRow.Position = UDim2.new(0, 36, 0, 0)
+            infoRow.BackgroundTransparency = 1
+            infoRow.ClipsDescendants = true
+            infoRow.Parent = row
+            local infoLayout = Instance.new("UIListLayout")
+            infoLayout.FillDirection = Enum.FillDirection.Horizontal
+            infoLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+            infoLayout.Padding = UDim.new(0, 6)
+            infoLayout.SortOrder = Enum.SortOrder.LayoutOrder
+            infoLayout.Parent = infoRow
+            local countLabel = Instance.new("TextLabel")
+            countLabel.Size = UDim2.fromOffset(0, 28)
+            countLabel.AutomaticSize = Enum.AutomaticSize.X
+            countLabel.BackgroundTransparency = 1
+            countLabel.Text = tostring(count) .. (count == 1 and " client" or " client's")
+            countLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            countLabel.TextSize = 14
+            countLabel.Font = Enum.Font.GothamBold
+            countLabel.TextXAlignment = Enum.TextXAlignment.Left
+            countLabel.TextYAlignment = Enum.TextYAlignment.Center
+            countLabel.LayoutOrder = 1
+            countLabel.Parent = infoRow
+            if maxAvatars > 0 and #clientList > 0 then
+                local shown = math.min(#clientList, maxAvatars)
+                local avatarStrip = Instance.new("Frame")
+                avatarStrip.Size = UDim2.fromOffset(shown * 24 + (shown - 1) * 7, 24)
+                avatarStrip.BackgroundTransparency = 1
+                avatarStrip.LayoutOrder = 2
+                avatarStrip.Parent = infoRow
+                local avatarLayout = Instance.new("UIListLayout")
+                avatarLayout.FillDirection = Enum.FillDirection.Horizontal
+                avatarLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+                avatarLayout.Padding = UDim.new(0, 7)
+                avatarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+                avatarLayout.Parent = avatarStrip
+                for j, clientInfo in ipairs(clientList) do
+                    if j > maxAvatars then break end
+                    local userId = tonumber(clientInfo.userId)
+                    if not userId then continue end
+                    local avatarColor = tostring(clientInfo.color or "#FFFFFF")
+                    local r = tonumber("0x" .. avatarColor:sub(2,3)) or 255
+                    local g = tonumber("0x" .. avatarColor:sub(4,5)) or 255
+                    local b = tonumber("0x" .. avatarColor:sub(6,7)) or 255
+                    local img = Instance.new("ImageLabel")
+                    img.Size = UDim2.fromOffset(24, 24)
+                    img.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+                    img.BackgroundTransparency = 0.3
+                    img.BorderSizePixel = 0
+                    img.LayoutOrder = j
+                    img.Parent = avatarStrip
+                    Instance.new("UICorner", img).CornerRadius = UDim.new(1, 0)
+                    local stroke = Instance.new("UIStroke")
+                    stroke.Thickness = 2
+                    stroke.Color = Color3.fromRGB(r, g, b)
+                    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+                    stroke.Parent = img
+                    local capturedImg = img
+                    task.spawn(function()
+                        local ok2, url = pcall(function()
+                            return game:GetService("Players"):GetUserThumbnailAsync(
+                                userId,
+                                Enum.ThumbnailType.HeadShot,
+                                Enum.ThumbnailSize.Size48x48
+                            )
+                        end)
+                        if ok2 and capturedImg.Parent then
+                            capturedImg.Image = url
+                        end
+                    end)
+                end
+            end
+            local joinBtn = Instance.new("TextButton")
+            joinBtn.Size = UDim2.new(0, 82, 0, 26)
+            joinBtn.Position = UDim2.new(1, -90, 0.5, 0)
+            joinBtn.AnchorPoint = Vector2.new(0, 0.5)
+            joinBtn.BackgroundColor3 = Color3.fromRGB(51, 95, 255)
+            joinBtn.BackgroundTransparency = 0
+            joinBtn.Text = isCurrentServer and "rejoin" or "join"
+            joinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            joinBtn.TextSize = 13
+            joinBtn.Font = Enum.Font.GothamBold
+            joinBtn.AutoButtonColor = true
+            joinBtn.Parent = row
+            Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 8)
+            local capturedJobId = jobId
+            joinBtn.MouseButton1Click:Connect(function()
+                pcall(function()
+                    if snyk == true then
+                        if DefaultLanguagee == "en" then
+                            sendnotification("Attempted serverhop to different server. Please disable the <Anti Scam> feature (after rejoining) in delta settings if you wish to switch servers on this game.")
+                        elseif DefaultLanguagee == "ru" then
+                            sendnotification("Попытка перейти на другой сервер. Пожалуйста, отключите функцию <Anti Scam> (после повторного входа) в настройках delta, если вы хотите переключаться между серверами в этой игре.")
+                        end
+                    end
+                    game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, capturedJobId)
+                end)
             end)
-        end)
+        end
+        if #serverData == 0 then
+            local noLabel = Instance.new("TextLabel")
+            noLabel.Size = UDim2.new(1, 0, 0, 40)
+            noLabel.BackgroundTransparency = 1
+            noLabel.Text = "No active servers"
+            noLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
+            noLabel.TextSize = 13
+            noLabel.Font = Enum.Font.Gotham
+            noLabel.TextXAlignment = Enum.TextXAlignment.Center
+            noLabel.Parent = slScrollFrame
+        end
+        task.wait()
+        slScrollFrame.CanvasPosition = Vector2.new(0, savedScrollY)
+        slUpdateScrollThumb()
     end
-    if #serverData == 0 then
-        local noLabel = Instance.new("TextLabel")
-        noLabel.Size = UDim2.new(1, 0, 0, 40)
-        noLabel.BackgroundTransparency = 1
-        noLabel.Text = "No active servers"
-        noLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
-        noLabel.TextSize = 13
-        noLabel.Font = Enum.Font.Gotham
-        noLabel.TextXAlignment = Enum.TextXAlignment.Center
-        noLabel.Parent = slScrollFrame
+
+    local function showServerListError(msg)
+        for _, child in ipairs(slScrollFrame:GetChildren()) do
+            if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end
+        end
+        local errLabel = Instance.new("TextLabel")
+        errLabel.Size = UDim2.new(1, 0, 0, 50)
+        errLabel.BackgroundTransparency = 1
+        errLabel.Text = msg
+        errLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+        errLabel.TextSize = 13
+        errLabel.Font = Enum.Font.GothamBold
+        errLabel.TextXAlignment = Enum.TextXAlignment.Center
+        errLabel.TextYAlignment = Enum.TextYAlignment.Center
+        errLabel.TextWrapped = true
+        errLabel.Parent = slScrollFrame
     end
-    task.wait()
-    slUpdateScrollThumb()
-end
 
-local function showServerListError(msg)
-    for _, child in ipairs(slScrollFrame:GetChildren()) do
-        if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end
+    local function requestServerList()
+        if wsConnected and ws then
+            pcall(function()
+                ws:Send(HttpService:JSONEncode({ type = "get_servers" }))
+            end)
+        else
+            showServerListError("Unable to connect to server.\nTrying to reconnect...")
+        end
     end
-    local errLabel = Instance.new("TextLabel")
-    errLabel.Size = UDim2.new(1, 0, 0, 50)
-    errLabel.BackgroundTransparency = 1
-    errLabel.Text = msg
-    errLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
-    errLabel.TextSize = 13
-    errLabel.Font = Enum.Font.GothamBold
-    errLabel.TextXAlignment = Enum.TextXAlignment.Center
-    errLabel.TextYAlignment = Enum.TextYAlignment.Center
-    errLabel.TextWrapped = true
-    errLabel.Parent = slScrollFrame
-end
 
-local function requestServerList()
-    if wsConnected and ws then
-        pcall(function()
-            ws:Send(HttpService:JSONEncode({ type = "get_servers" }))
-        end)
-    else
-        showServerListError("Unable to connect to server.\nTrying to reconnect...")
+    local function openServerList()
+        serverListVisible = true
+        serverListWindow.AnchorPoint = serverListLastAnchor
+        serverListWindow.Position    = serverListLastPos
+        serverListWindow.Size        = serverListLastSize
+        serverListWindow.Visible     = true
+        serverListBtn.Image = "rbxassetid://85034401017513"
+        requestServerList()
     end
-end
 
-local function openServerList()
-    serverListVisible = true
-    serverListWindow.AnchorPoint = serverListLastAnchor
-    serverListWindow.Position    = serverListLastPos
-    serverListWindow.Size        = serverListLastSize
-    serverListWindow.Visible     = true
-    serverListBtn.Image = "rbxassetid://85034401017513"
-    requestServerList()
-end
-
-local function closeServerList()
-    serverListVisible = false
-    serverListWindow.Visible = false
-    serverListBtn.Image = "rbxassetid://117293331356936"
-end
-
-slCloseBtn.MouseButton1Click:Connect(closeServerList)
-serverListBtn.MouseButton1Click:Connect(function()
-    if serverListVisible then closeServerList() else openServerList() end
-end)
-
-slScrollThumb.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        slIsDraggingScrollThumb = true
-        slScrollActiveInput     = input
-        slScrollThumbDragStart  = input.Position
-        slScrollThumbStartY     = slScrollThumb.Position.Y.Offset
+    local function closeServerList()
+        serverListVisible = false
+        serverListWindow.Visible = false
+        serverListBtn.Image = "rbxassetid://117293331356936"
     end
-end)
 
-slScrollTrack.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        slSetScrollFromThumb(input.Position.Y - slScrollTrack.AbsolutePosition.Y - (slScrollThumb.AbsoluteSize.Y / 2))
-    end
-end)
+    slCloseBtn.MouseButton1Click:Connect(closeServerList)
+    serverListBtn.MouseButton1Click:Connect(function()
+        if serverListVisible then closeServerList() else openServerList() end
+    end)
 
-slScrollFrame:GetPropertyChangedSignal("CanvasPosition"):Connect(slUpdateScrollThumb)
-slScrollFrame:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(slUpdateScrollThumb)
-slScrollFrame:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(slUpdateScrollThumb)
-serverListWindow:GetPropertyChangedSignal("AbsoluteSize"):Connect(slUpdateScrollThumb)
+    slScrollThumb.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            slIsDraggingScrollThumb = true
+            slScrollActiveInput     = input
+            slScrollThumbDragStart  = input.Position
+            slScrollThumbStartY     = slScrollThumb.Position.Y.Offset
+        end
+    end)
 
-serverListWindow.InputBegan:Connect(function(input)
-    if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
-    and not serverListResizing and not dragging and not isResizing then
-        serverListDragging = true
-        serverListDragActiveInput = input
-        serverListDragStart = input.Position
-        serverListDragWindowStart = serverListWindow.AbsolutePosition
-    end
-end)
+    slScrollTrack.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            slSetScrollFromThumb(input.Position.Y - slScrollTrack.AbsolutePosition.Y - (slScrollThumb.AbsoluteSize.Y / 2))
+        end
+    end)
 
-UserInputService.InputChanged:Connect(function(input)
-    if serverListDragging and (
-        input.UserInputType == Enum.UserInputType.MouseMovement
-        or (input.UserInputType == Enum.UserInputType.Touch and input == serverListDragActiveInput)
-    ) then
-        local d       = input.Position - serverListDragStart
-        local viewport = workspace.CurrentCamera.ViewportSize
-        local winSize  = serverListWindow.AbsoluteSize
-        serverListWindow.AnchorPoint = Vector2.new(0, 0)
-        serverListWindow.Position = UDim2.fromOffset(
-            math.clamp(serverListDragWindowStart.X + d.X, 0, viewport.X - winSize.X),
-            math.clamp(serverListDragWindowStart.Y + d.Y, 0, viewport.Y - winSize.Y)
-        )
-    end
-    if slIsDraggingScrollThumb and (
-        input.UserInputType == Enum.UserInputType.MouseMovement
-        or (input.UserInputType == Enum.UserInputType.Touch and input == slScrollActiveInput)
-    ) then
-        slSetScrollFromThumb(slScrollThumbStartY + (input.Position.Y - slScrollThumbDragStart.Y))
-    end
-    if serverListResizing and (
-        input.UserInputType == Enum.UserInputType.MouseMovement
-        or (input.UserInputType == Enum.UserInputType.Touch and input == serverListResizeActiveInput)
-    ) then
-        local mousePos = input.Position
-        local viewport = workspace.CurrentCamera.ViewportSize
-        local winPos   = serverListWindow.AbsolutePosition
-        serverListWindow.Size = UDim2.new(0,
-            math.clamp(mousePos.X - winPos.X, 240, math.min(700, viewport.X - winPos.X)),
-            0,
-            math.clamp(mousePos.Y - winPos.Y, 140, math.min(600, viewport.Y - winPos.Y))
-        )
-        serverListLastSize = serverListWindow.Size
-    end
-end)
+    slScrollFrame:GetPropertyChangedSignal("CanvasPosition"):Connect(slUpdateScrollThumb)
+    slScrollFrame:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(slUpdateScrollThumb)
+    slScrollFrame:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(slUpdateScrollThumb)
+    serverListWindow:GetPropertyChangedSignal("AbsoluteSize"):Connect(slUpdateScrollThumb)
 
-slResizeHandle.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        serverListResizing = true
-        serverListResizeActiveInput = input
-        TweenService:Create(slResizeImage, TweenInfo.new(0.1), { ImageTransparency = 0.35 }):Play()
-    end
-end)
+    serverListWindow.InputBegan:Connect(function(input)
+        if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
+        and not serverListResizing and not dragging and not isResizing then
+            serverListDragging = true
+            serverListDragActiveInput = input
+            serverListDragStart = input.Position
+            serverListDragWindowStart = serverListWindow.AbsolutePosition
+        end
+    end)
 
-slResizeHandle.MouseEnter:Connect(function()
-    TweenService:Create(slResizeImage, TweenInfo.new(0.3,
-        Enum.EasingStyle.Exponential, Enum.EasingDirection.Out),
-        { ImageTransparency = 0.8 }):Play()
-end)
+    UserInputService.InputChanged:Connect(function(input)
+        if serverListDragging and (
+            input.UserInputType == Enum.UserInputType.MouseMovement
+            or (input.UserInputType == Enum.UserInputType.Touch and input == serverListDragActiveInput)
+        ) then
+            local d       = input.Position - serverListDragStart
+            local viewport = workspace.CurrentCamera.ViewportSize
+            local winSize  = serverListWindow.AbsoluteSize
+            serverListWindow.AnchorPoint = Vector2.new(0, 0)
+            serverListWindow.Position = UDim2.fromOffset(
+                math.clamp(serverListDragWindowStart.X + d.X, 0, viewport.X - winSize.X),
+                math.clamp(serverListDragWindowStart.Y + d.Y, 0, viewport.Y - winSize.Y)
+            )
+        end
+        if slIsDraggingScrollThumb and (
+            input.UserInputType == Enum.UserInputType.MouseMovement
+            or (input.UserInputType == Enum.UserInputType.Touch and input == slScrollActiveInput)
+        ) then
+            slSetScrollFromThumb(slScrollThumbStartY + (input.Position.Y - slScrollThumbDragStart.Y))
+        end
+        if serverListResizing and (
+            input.UserInputType == Enum.UserInputType.MouseMovement
+            or (input.UserInputType == Enum.UserInputType.Touch and input == serverListResizeActiveInput)
+        ) then
+            local mousePos = input.Position
+            local viewport = workspace.CurrentCamera.ViewportSize
+            local winPos   = serverListWindow.AbsolutePosition
+            serverListWindow.Size = UDim2.new(0,
+                math.clamp(mousePos.X - winPos.X, 240, math.min(700, viewport.X - winPos.X)),
+                0,
+                math.clamp(mousePos.Y - winPos.Y, 140, math.min(600, viewport.Y - winPos.Y))
+            )
+            serverListLastSize = serverListWindow.Size
+        end
+    end)
 
-slResizeHandle.MouseLeave:Connect(function()
-    if not serverListResizing then
+    slResizeHandle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            serverListResizing = true
+            serverListResizeActiveInput = input
+            TweenService:Create(slResizeImage, TweenInfo.new(0.1), { ImageTransparency = 0.35 }):Play()
+        end
+    end)
+
+    slResizeHandle.MouseEnter:Connect(function()
         TweenService:Create(slResizeImage, TweenInfo.new(0.3,
             Enum.EasingStyle.Exponential, Enum.EasingDirection.Out),
-            { ImageTransparency = 1 }):Play()
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        if serverListDragging then
-            serverListLastPos    = serverListWindow.Position
-            serverListLastAnchor = serverListWindow.AnchorPoint
-        end
-        if serverListResizing then
-            TweenService:Create(slResizeImage, TweenInfo.new(0.17), { ImageTransparency = 1 }):Play()
-        end
-        serverListDragging = false
-        serverListDragActiveInput = nil
-        serverListResizing = false
-        serverListResizeActiveInput = nil
-        slIsDraggingScrollThumb = false
-        slScrollActiveInput = nil
-    end
-end)
-
-task.spawn(function()
-    while true do
-        task.wait(3)
-        if serverListVisible then
-            requestServerList()
-        end
-    end
-end)
-
-local wsAttempt = 0
-
-local function wsConnect()
-    local ok, result = pcall(function()
-        return WebSocket.connect("ws://92.246.139.177:1000")
-    end)
-    if not ok then
-        wsAttempt = wsAttempt + 1
-        warn("ChatService: connect failed:", result)
-        addMessage("System", "[attempt " .. wsAttempt .. "] Unable to connect. Retry in 5s...", Color3.fromRGB(255, 80, 80))
-        task.delay(5, wsConnect)
-        return
-    end
-    wsAttempt = 0
-
-    ws = result
-    wsConnected = true
-
-    ws:Send(HttpService:JSONEncode({
-        type   = "register",
-        jobId  = getgenv().haha,
-        name   = player.Name,
-        userId = player.UserId,
-    }))
-
-    ws.OnMessage:Connect(function(raw)
-        local ok2, data = pcall(HttpService.JSONDecode, HttpService, raw)
-        if not ok2 or type(data) ~= "table" then return end
-
-        if data.type == "color_assign" then
-            myColorHex = tostring(data.color or "#FFFFFF")
-            return
-        end
-
-        if data.type == "self_join" then
-            addMessage("System", "You connected to SNPWARE CHAT!", Color3.fromRGB(131, 255, 100))
-            game:GetService("StarterGui"):SetCore("SendNotification", {
-                Title = "SNPWARE CHAT";
-                Text  = "You connected to the server!";
-                Duration = 5;
-            })
-            return
-        end
-
-        if data.type == "join" then
-            local name = tostring(data.name or "?")
-            addMessage("System", name .. " connected to server!", Color3.fromRGB(136, 255, 100))
-            game:GetService("StarterGui"):SetCore("SendNotification", {
-                Title = "SNPWARE CHAT";
-                Text  = name .. " connected to server!";
-                Duration = 5;
-            })
-            return
-        end
-
-        if data.type == "leave" then
-            local name = tostring(data.name or "?")
-            addMessage("System", name .. " left the server.", Color3.fromRGB(180, 180, 180))
-            game:GetService("StarterGui"):SetCore("SendNotification", {
-                Title = "SNPWARE CHAT";
-                Text  = name .. " left the server.";
-                Duration = 5;
-            })
-            return
-        end
-
-        if data.type == "spam_warn" then
-            local remaining = tonumber(data.remaining) or 60
-            addMessage("System", "Too many request. Wait " .. remaining .. " sec.", Color3.fromRGB(255, 80, 80))
-            return
-        end
-
-        if data.type == "history" then
-            if type(data.messages) == "table" then
-                for _, msg in ipairs(data.messages) do
-                    addMessage(
-                        tostring(msg.name or "?"),
-                        tostring(msg.text or ""),
-                        nil,
-                        tostring(msg.color or "#FFFFFF"),
-                        true
-                    )
-                end
-                task.wait()
-                messageList.CanvasPosition = Vector2.new(0, messageList.AbsoluteCanvasSize.Y)
-                updateScrollThumb()
-            end
-            return
-        end
-
-        if data.type == "server_list" then
-            if type(data.servers) == "table" then
-                updateServerListUI(data.servers)
-            end
-            return
-        end
-
-        if data.type ~= "chat" then return end
-        if type(data.name) ~= "string" or type(data.text) ~= "string" then return end
-
-        addMessage(data.name, data.text, nil, tostring(data.color or "#FFFFFF"))
+            { ImageTransparency = 0.8 }):Play()
     end)
 
-    ws.OnClose:Connect(function()
-        wsConnected = false
-        ws = nil
-        warn("ChatService: closed reconnect wait 5s...")
-        addMessage("System", "Disconnected from SNPWARE CHAT. Reconnecting in 5s...", Color3.fromRGB(255, 120, 80))
-        pcall(function()
-            game:GetService("StarterGui"):SetCore("SendNotification", {
-                Title = "SNPWARE CHAT";
-                Text  = "Connection lost. Reconnecting...";
-                Duration = 5;
-            })
+    slResizeHandle.MouseLeave:Connect(function()
+        if not serverListResizing then
+            TweenService:Create(slResizeImage, TweenInfo.new(0.3,
+                Enum.EasingStyle.Exponential, Enum.EasingDirection.Out),
+                { ImageTransparency = 1 }):Play()
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if serverListDragging then
+                serverListLastPos    = serverListWindow.Position
+                serverListLastAnchor = serverListWindow.AnchorPoint
+            end
+            if serverListResizing then
+                TweenService:Create(slResizeImage, TweenInfo.new(0.17), { ImageTransparency = 1 }):Play()
+            end
+            serverListDragging = false
+            serverListDragActiveInput = nil
+            serverListResizing = false
+            serverListResizeActiveInput = nil
+            slIsDraggingScrollThumb = false
+            slScrollActiveInput = nil
+        end
+    end)
+
+    task.spawn(function()
+        while true do
+            task.wait(3)
+            if serverListVisible then
+                requestServerList()
+            end
+        end
+    end)
+
+    local wsAttempt = 0
+
+    local function wsConnect()
+        -- закрываем старое подключение если оно ещё живо
+        if ws then
+            pcall(function() ws:Close() end)
+            ws = nil
+            wsConnected = false
+        end
+
+        local ok, result = pcall(function()
+            return WebSocket.connect("ws://92.246.139.177:1000")
         end)
-        task.delay(5, wsConnect)
+        if not ok then
+            wsAttempt = wsAttempt + 1
+            warn("ChatService: connect failed:", result)
+            addMessage("System", "[attempt " .. wsAttempt .. "] Unable to connect. Retry in 5s...", Color3.fromRGB(255, 80, 80))
+            task.delay(5, wsConnect)
+            return
+        end
+        wsAttempt = 0
+
+        ws = result
+        wsConnected = true
+
+        ws:Send(HttpService:JSONEncode({
+            type   = "register",
+            jobId  = getgenv().haha,
+            name   = LocalPlayer.Name,
+            userId = LocalPlayer.UserId,
+        }))
+
+        ws.OnMessage:Connect(function(raw)
+            local ok2, data = pcall(HttpService.JSONDecode, HttpService, raw)
+            if not ok2 or type(data) ~= "table" then return end
+
+            if data.type == "color_assign" then
+                myColorHex = tostring(data.color or "#FFFFFF")
+                return
+            end
+
+            if data.type == "self_join" then
+                addMessage("System", "You connected to SNPWARE CHAT!", Color3.fromRGB(131, 255, 100))
+                game:GetService("StarterGui"):SetCore("SendNotification", {
+                    Title = "SNPWARE CHAT";
+                    Text  = "You connected to the server!";
+                    Duration = 5;
+                })
+                return
+            end
+
+            if data.type == "join" then
+                local name = tostring(data.name or "?")
+                addMessage("System", name .. " connected to server!", Color3.fromRGB(136, 255, 100))
+                game:GetService("StarterGui"):SetCore("SendNotification", {
+                    Title = "SNPWARE CHAT";
+                    Text  = name .. " connected to server!";
+                    Duration = 5;
+                })
+                return
+            end
+
+            if data.type == "leave" then
+                local name = tostring(data.name or "?")
+                addMessage("System", name .. " left the server.", Color3.fromRGB(180, 180, 180))
+                game:GetService("StarterGui"):SetCore("SendNotification", {
+                    Title = "SNPWARE CHAT";
+                    Text  = name .. " left the server.";
+                    Duration = 5;
+                })
+                return
+            end
+
+            if data.type == "spam_warn" then
+                local remaining = tonumber(data.remaining) or 60
+                addMessage("System", "Too many request. Wait " .. remaining .. " sec.", Color3.fromRGB(255, 80, 80))
+                return
+            end
+
+            if data.type == "history" then
+                if type(data.messages) == "table" then
+                    for _, msg in ipairs(data.messages) do
+                        local histReply = nil
+                        if type(msg.replyTo) == "table" then
+                            histReply = {
+                                name    = tostring(msg.replyTo.name    or "?"),
+                                text    = tostring(msg.replyTo.text    or ""),
+                                nameHex = tostring(msg.replyTo.nameHex or "#AAAAAA"),
+                            }
+                        end
+                        addMessage(
+                            tostring(msg.name or "?"),
+                            tostring(msg.text or ""),
+                            nil,
+                            tostring(msg.color or "#FFFFFF"),
+                            true,
+                            histReply
+                        )
+                    end
+                    task.wait()
+                    messageList.CanvasPosition = Vector2.new(0, messageList.AbsoluteCanvasSize.Y)
+                    updateScrollThumb()
+                end
+                return
+            end
+
+            if data.type == "server_list" then
+                if type(data.servers) == "table" then
+                    updateServerListUI(data.servers)
+                end
+                return
+            end
+
+            if data.type ~= "chat" then return end
+            if type(data.name) ~= "string" or type(data.text) ~= "string" then return end
+
+            local incomingReply = nil
+            if type(data.replyTo) == "table" then
+                incomingReply = {
+                    name    = tostring(data.replyTo.name    or "?"),
+                    text    = tostring(data.replyTo.text    or ""),
+                    nameHex = tostring(data.replyTo.nameHex or "#AAAAAA"),
+                }
+            end
+            addMessage(data.name, data.text, nil, tostring(data.color or "#FFFFFF"), false, incomingReply)
+        end)
+
+        ws.OnClose:Connect(function()
+            wsConnected = false
+            ws = nil
+            warn("ChatService: closed reconnect wait 5s...")
+            addMessage("System", "Disconnected from SNPWARE CHAT. Reconnecting in 5s...", Color3.fromRGB(255, 120, 80))
+            pcall(function()
+                game:GetService("StarterGui"):SetCore("SendNotification", {
+                    Title = "SNPWARE CHAT";
+                    Text  = "Connection lost. Reconnecting...";
+                    Duration = 5;
+                })
+            end)
+            task.delay(5, wsConnect)
+        end)
+    end
+
+    task.spawn(wsConnect)
+    apg = {
+        "Spacednikname",
+        "cionatoOFF",
+        "ryansapsaa",
+    }
+
+    local function isAdmin(name)
+        for _, n in ipairs(apg) do
+            if n == name then return true end
+        end
+        return false
+    end
+
+    local function rainbowColor(t)
+        local r = math.sin(t) * 0.5 + 0.5
+        local g = math.sin(t + 2.094) * 0.5 + 0.5
+        local b = math.sin(t + 4.189) * 0.5 + 0.5
+        return Color3.new(r, g, b)
+    end
+
+    local function addTag(character)
+        local existing = character:FindFirstChild("AdminTag")
+        if existing then existing:Destroy() end
+
+        local hrp = character:WaitForChild("HumanoidRootPart", 5)
+        if not hrp then return end
+
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "AdminTag"
+        billboard.Size = UDim2.fromOffset(100, 30)
+        billboard.StudsOffset = Vector3.new(0, 3.7, 0)
+        billboard.AlwaysOnTop = false
+        billboard.Adornee = hrp
+        billboard.Parent = character
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = "ADMIN"
+        label.TextSize = 40
+        label.FontFace = Font.new(
+            "rbxassetid://12187371840", 
+            Enum.FontWeight.Bold
+        )
+        label.TextStrokeTransparency = 1
+        label.TextTransparency = 0
+        label.Parent = billboard
+
+        local t = 0
+        task.spawn(function()
+            while label and label.Parent do
+                t = t + 0.04
+                label.TextColor3 = rainbowColor(t)
+                task.wait(0.03)
+            end
+        end)
+    end
+
+    local function setupPlayer(player)
+        local function onCharacter(character)
+            task.spawn(function() addTag(character) end)
+        end
+        if player.Character then
+            onCharacter(player.Character)
+        end
+        player.CharacterAdded:Connect(onCharacter)
+    end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if isAdmin(player.Name) then
+            setupPlayer(player)
+        end
+    end
+
+    Players.PlayerAdded:Connect(function(player)
+        if isAdmin(player.Name) then
+            setupPlayer(player)
+        end
     end)
-end
-
-task.spawn(wsConnect)
-
+end)

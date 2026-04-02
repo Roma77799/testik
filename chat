@@ -1338,7 +1338,7 @@ task.spawn(function()
         end
 
         local ok, result = pcall(function()
-            return WebSocket.connect("ws://92.246.139.177:1000")
+            return WebSocket.connect("ws://92.246.139.177:1001")
         end)
         if not ok then
             wsAttempt = wsAttempt + 1

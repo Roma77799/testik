@@ -5,7 +5,7 @@ local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local UserInputService = game:GetService("UserInputService")
-local TextChatService = game:GetService("TextChatService")
+local TextChatService  = game:GetService("TextChatService")
 
 task.spawn(function()
     snyk = nil
@@ -374,54 +374,34 @@ task.spawn(function()
             bubbleCfg = Instance.new("BubbleChatConfiguration")
             bubbleCfg.Parent = TextChatService
         end
-        bubbleCfg.Enabled               = true
-        bubbleCfg.BubbleDuration        = 7
-        bubbleCfg.MaxBubbles            = 3
-        bubbleCfg.BackgroundColor3      = Color3.fromRGB(15, 15, 20)
-        bubbleCfg.BackgroundTransparency = 0.08
-        bubbleCfg.TextColor3            = Color3.fromRGB(230, 230, 255)
-        bubbleCfg.TextSize              = 14
-        bubbleCfg.FontFace              = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium)
-        bubbleCfg.TailVisible           = false
-        bubbleCfg.VerticalStudsOffset   = 1.5
-        if not bubbleCfg:FindFirstChildOfClass("UICorner") then
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(0, 12)
-            corner.Parent = bubbleCfg
-        end
-        -- Per-bubble override: custom style on each bubble
-        TextChatService.OnBubbleAdded = function(msg, adornee)
-            local props = Instance.new("BubbleChatMessageProperties")
-            props.BackgroundColor3       = Color3.fromRGB(18, 18, 24)
-            props.BackgroundTransparency = 0.08
-            props.TextColor3             = Color3.fromRGB(235, 235, 255)
-            props.TextSize               = 14
-            props.FontFace               = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium)
-            local c = Instance.new("UICorner")
-            c.CornerRadius = UDim.new(0, 12)
-            c.Parent = props
-            return props
-        end
+        bubbleCfg.Enabled = true
     end)
 
     local function displayBubbleForPlayer(senderName, text)
-        pcall(function()
-            if senderName == LocalPlayer.Name then
-                local char = LocalPlayer.Character
-                if char then
-                    TextChatService:DisplayBubble(char, text)
-                end
-            else
-                for _, p in ipairs(Players:GetPlayers()) do
-                    if p.Name == senderName then
-                        local char = p.Character
-                        if char then
-                            TextChatService:DisplayBubble(char, text)
+        task.spawn(function()
+            pcall(function()
+                local char
+                if senderName == LocalPlayer.Name then
+                    char = LocalPlayer.Character
+                    if not char then
+                        char = LocalPlayer.CharacterAdded:Wait()
+                    end
+                else
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        if p.Name == senderName then
+                            char = p.Character
+                            if not char then
+                                char = p.CharacterAdded:Wait()
+                            end
+                            break
                         end
-                        break
                     end
                 end
-            end
+                if not char then return end
+                -- wait for Head to be ready (handles mid-respawn timing)
+                char:WaitForChild("Head", 5)
+                TextChatService:DisplayBubble(char, text)
+            end)
         end)
     end
     -- ─────────────────────────────────────────────────────────────────────────────

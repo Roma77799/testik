@@ -5604,7 +5604,6 @@ Scale=1,
 
 local ar
 local as
-local aF=0
 
 local at=ak and 30 or 20
 local au=aq.Size.X.Offset
@@ -6751,7 +6750,6 @@ as.AbsolutePosition.Y+as.AbsoluteSize.Y-aw+(ao.MenuPadding*2)
 end
 
 local as
-local aF=0
 
 function ar.Display(at)
 local au=an.Values
@@ -6848,9 +6846,6 @@ end
 end
 
 function ar.Refresh(at,au)
-aF=aF+1
-local av=aF
-
 for av,aw in next,an.UIElements.Menu.Frame.ScrollingFrame:GetChildren()do
 if not aw:IsA"UIListLayout"then
 aw:Destroy()
@@ -6881,9 +6876,6 @@ end
 task.spawn(function()
 local aw=0
 for ax,ay in next,au do
-if av~=aF then
-return
-end
 if(ay.Type~="Divider")then
 local az={
 Name=typeof(ay)=="table"and ay.Title or ay,
@@ -7132,9 +7124,6 @@ else a.load'I'
 end
 end
 
-if av~=aF then
-return
-end
 local az=an.MenuWidth or 0
 if az==0 then
 for aA,aB in next,an.Tabs do

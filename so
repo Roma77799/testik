@@ -5604,6 +5604,7 @@ Scale=1,
 
 local ar
 local as
+local aF=0
 
 local at=ak and 30 or 20
 local au=aq.Size.X.Offset
@@ -6750,7 +6751,6 @@ as.AbsolutePosition.Y+as.AbsoluteSize.Y-aw+(ao.MenuPadding*2)
 end
 
 local as
-local aF=true
 
 function ar.Display(at)
 local au=an.Values
@@ -6846,8 +6846,9 @@ end
 end
 end
 
-function ar.Refresh(at,au,av)
-au=au or an.Values or{}
+function ar.Refresh(at,au)
+aF=aF+1
+local av=aF
 
 for av,aw in next,an.UIElements.Menu.Frame.ScrollingFrame:GetChildren()do
 if not aw:IsA"UIListLayout"then
@@ -6876,7 +6877,12 @@ as.Name="SearchBar"
 end
 end
 
+task.spawn(function()
+local aw=0
 for ax,ay in next,au do
+if av~=aF then
+return
+end
 if(ay.Type~="Divider")then
 local az={
 Name=typeof(ay)=="table"and ay.Title or ay,
@@ -7043,6 +7049,8 @@ end
 
 an.Tabs[ax]=az
 
+ar:Display()
+
 if aq=="Dropdown"then
 aj.AddSignal(az.UIElements.TabItem.MouseButton1Click,function()
 if az.Locked then return end
@@ -7112,11 +7120,20 @@ Callback(ay.Callback or function()end)
 end)
 end
 
+aw=aw+1
+if aw%25==0 then
+RecalculateCanvasSize()
+RecalculateListSize()
+task.wait()
+end
 else a.load'I'
 :New{Parent=an.UIElements.Menu.Frame.ScrollingFrame}
 end
 end
 
+if av~=aF then
+return
+end
 local az=an.MenuWidth or 0
 if az==0 then
 for aA,aB in next,an.Tabs do
@@ -7129,18 +7146,13 @@ end
 an.UIElements.MenuCanvas.Size=UDim2.new(0,az+6+6+5+5+18+6+6,an.UIElements.MenuCanvas.Size.Y.Scale,an.UIElements.MenuCanvas.Size.Y.Offset)
 RecalculateCanvasSize()
 RecalculateListSize()
-ar:Display()
-if not av then
 Callback()
-end
+end)
 
 an.Values=au
-aF=false
 end
 
-an.Values=an.Values or{}
-ar:Display()
-Callback()
+ar:Refresh(an.Values)
 
 function ar.Select(at,au)
 if au then
@@ -7152,12 +7164,7 @@ else
 an.Value=nil
 end
 end
-if aF then
-ar:Display()
-Callback()
-else
 ar:Refresh(an.Values)
-end
 end
 
 RecalculateListSize()
@@ -7165,9 +7172,6 @@ RecalculateCanvasSize()
 
 function ar.Open(at)
 if ap then
-if aF then
-ar:Refresh(an.Values,true)
-end
 an.UIElements.Menu.Visible=true
 an.UIElements.MenuCanvas.Visible=true
 an.UIElements.MenuCanvas.Active=true

@@ -6751,6 +6751,7 @@ as.AbsolutePosition.Y+as.AbsoluteSize.Y-aw+(ao.MenuPadding*2)
 end
 
 local as
+local aF=0
 
 function ar.Display(at)
 local au=an.Values

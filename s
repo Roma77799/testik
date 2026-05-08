@@ -1,4 +1,3 @@
-local r = game:GetService("RunService")
 local f = game:GetService("ReplicatedStorage")
 function printTable(t, indent)
     indent = indent or 0
@@ -14,7 +13,8 @@ function printTable(t, indent)
 end
 local getPlayerData = f:FindFirstChild("GetPlayerData", true)
 if getPlayerData then
-    r.RenderStepped:Connect(function()
+    while true do
+        task.wait(0.1)
         local data = getPlayerData:InvokeServer()
         
         if type(data) == "table" then
@@ -24,5 +24,5 @@ if getPlayerData then
         else
             print("Получены не табличные данные:", data)
         end
-    end)
+    end
 end

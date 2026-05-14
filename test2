@@ -62,7 +62,7 @@ task.spawn(function()
         ]], codeUrl)
 
         if queueteleport then queueteleport(queueCode) end
-        TeleportService:Teleport(96120331236197)
+        TeleportService:Teleport(95206881)
         return
     end
 end)
@@ -196,7 +196,7 @@ task.spawn(function()
             ]], codeUrl)
 
             if queueteleport then queueteleport(queueCode) end
-            TeleportService:Teleport(96120331236197)
+            TeleportService:Teleport(95206881)
             break
         end
     end
@@ -513,7 +513,7 @@ local function checkTargetStatus()
             ]], codeUrl)
 
             if queueteleport then queueteleport(queueCode) end
-            TeleportService:Teleport(96120331236197)
+            TeleportService:Teleport(95206881)
         end
         return false
     end

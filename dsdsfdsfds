@@ -1,54 +1,39 @@
 local CoreGui = game:GetService("CoreGui")
-
--- Безопасный поиск целевой папки с использованием WaitForChild
-local function getTargetFolder()
-    local success, res = pcall(function()
-        local base = CoreGui:WaitForChild("10da44577f5dca6201c46c31f68b1072382d4b83cb3b666547904cb2bca6bf2a", 5)
-        if not base then return nil end
-        local gFolder = base:WaitForChild("_g0e25751", 5)
-        if not gFolder then return nil end
-        local buttons = gFolder:WaitForChild("HoneyFeatureActionButtons", 5)
-        if not buttons then return nil end
-        -- Если это конечная кнопка, мы мониторим её детей, либо саму папку кнопок
-        return buttons
-    end)
-    return success and res or nil
-end
-
-local TargetFolder = getTargetFolder()
-
-if not TargetFolder then
-    warn("[-] Не удалось найти целевой путь в CoreGui. Проверь, запущен ли интерфейс.")
-    return
-end
-
--- Расширенный список свойств для точного копирования визуала
-local propertiesToCopy = {
+local props = {
     "ClassName", "Name", "Size", "Position", "BackgroundColor3", 
     "BackgroundTransparency", "Text", "TextColor3", "Image", 
     "Visible", "ZIndex", "AnchorPoint", "TextSize", "Font",
-    "Thickness", "Color", "ApplyStrokeMode", "CornerRadius" -- Добавили свойства для Stroke и Corner
+    "Thickness", "Color", "ApplyStrokeMode", "CornerRadius"
 }
-
+local function getTargetFolder()
+    local _, res = pcall(function()
+        local base = CoreGui:WaitForChild("10da44577f5dca6201c46c31f68b1072382d4b83cb3b666547904cb2bca6bf2a", 5)
+        local gFolder = base and base:WaitForChild("_g0e25751", 5)
+        return gFolder and gFolder:WaitForChild("HoneyFeatureActionButtons", 5)
+    end)
+    return res
+end
+local TargetFolder = getTargetFolder()
+if not TargetFolder then 
+    warn("[-] Путь не найден") 
+    return 
+end
 local function dumpInstance(obj)
     local data = {}
-    for _, prop in ipairs(propertiesToCopy) do
+    for _, prop in ipairs(props) do
         pcall(function()
-            local value = obj[prop]
-            if value ~= nil then
-                if typeof(value) == "Color3" then
-                    data[prop] = "Color3.fromRGB("..math.floor(value.R*255)..", "..math.floor(value.G*255)..", "..math.floor(value.B*255)..")"
-                elseif typeof(value) == "UDim2" then
-                    -- Форматируем UDim2 без лишних фигурных скобок для чистоты кода
-                    data[prop] = "UDim2.new("..tostring(value)..")"
-                elseif typeof(value) == "Vector2" then
-                    data[prop] = "Vector2.new("..tostring(value)..")"
-                elseif typeof(value) == "EnumItem" then
-                    data[prop] = tostring(value)
-                elseif typeof(value) == "string" then
-                    data[prop] = '"'..value..'"'
+            local v = obj[prop]
+            if v ~= nil then
+                if typeof(v) == "Color3" then
+                    data[prop] = string.format("Color3.fromRGB(%d, %d, %d)", math.floor(v.R*255), math.floor(v.G*255), math.floor(v.B*255))
+                elseif typeof(v) == "UDim2" then
+                    data[prop] = "UDim2.new(" .. tostring(v) .. ")"
+                elseif typeof(v) == "Vector2" then
+                    data[prop] = "Vector2.new(" .. tostring(v) .. ")"
+                elseif typeof(v) == "string" then
+                    data[prop] = '"' .. v .. '"'
                 else
-                    data[prop] = tostring(value)
+                    data[prop] = tostring(v)
                 end
             end
         end)
@@ -60,7 +45,6 @@ local function dumpInstance(obj)
     end
     return data
 end
-
 local function tableToString(t, indent)
     indent = indent or ""
     local str = "{\n"
@@ -79,30 +63,24 @@ local function tableToString(t, indent)
     end
     return str .. indent .. "}"
 end
-
--- Подключаем слушатель
-local connection
-connection = TargetFolder.ChildAdded:Connect(function(child)
-    task.wait(0.2) -- Даем долям секунды на инициализацию свойств объекта
+TargetFolder.ChildAdded:Connect(function(child)
+    task.wait(0.2)
+    print("[+] Изменения в структуре: " .. child.Name)
     
-    print("[+] Обнаружен новый объект в структуре: " .. child.Name)
-    
-    local success, dumpedData = pcall(function()
-        return dumpInstance(child)
-    end)
-    
+    local success, dumpedData = pcall(dumpInstance, child)
     if success and dumpedData then
         local finalString = tableToString(dumpedData)
+        
+        -- Вот он, твой setclipboard, теперь на видном месте :)
         if setclipboard then
             setclipboard(finalString)
-            print("[*] Свойства объекта " .. child.Name .. " и его под-элементов успешно скопированы в буфер!")
+            print("[*] Данные скопированы в буфер обмена!")
         else
             print(finalString)
-            warn("[-] setclipboard не поддерживается вашим эксплойтом, выведено в консоль.")
+            warn("[-] setclipboard не поддерживается эксплойтом.")
         end
     else
-        warn("[-] Ошибка при дампе объекта: " .. tostring(dumpedData))
+        warn("[-] Ошибка дампа")
     end
 end)
-
-print("[!] Дампер успешно запущен. Слушаю папку: " .. TargetFolder:GetFullName())
+print("[!] Скрипт запущен и слушает: " .. TargetFolder:GetFullName())

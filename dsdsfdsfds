@@ -8,7 +8,7 @@ local props = {
 local function getTargetFolder()
     local _, res = pcall(function()
         local base = CoreGui:WaitForChild("10da44577f5dca6201c46c31f68b1072382d4b83cb3b666547904cb2bca6bf2a", 5)
-        local gFolder = base and base:WaitForChild("_g0e25751", 5)
+        local gFolder = base and base:WaitForChild("_gcb92a91", 5)
         return gFolder and gFolder:WaitForChild("HoneyFeatureActionButtons", 5)
     end)
     return res

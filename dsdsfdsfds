@@ -1,97 +1,199 @@
-local CoreGui = game:GetService("CoreGui")
+local function createButton(name, text, defaultX, defaultY, corner, callback)
+    local controller = {}
+    controller.sizeX = defaultX
+    controller.sizeY = defaultY
+    controller.connections = {}
 
-local props = {
-    "ClassName", "Name", "Size", "Position", "BackgroundColor3", 
-    "BackgroundTransparency", "Text", "TextColor3", "Image", 
-    "Visible", "ZIndex", "AnchorPoint", "TextSize", "Font",
-    "Thickness", "Color", "ApplyStrokeMode", "CornerRadius"
-}
+    -- Services
+    local TweenService = game:GetService("TweenService")
+    local UserInputService = game:GetService("UserInputService")
+    local RunService = game:GetService("RunService")
+    local CoreGui = game:GetService("CoreGui")
 
-local function getTargetFolder()
-    local _, res = pcall(function()
-        local base = CoreGui:WaitForChild("10da44577f5dca6201c46c31f68b1072382d4b83cb3b666547904cb2bca6bf2a", 5)
-        local gFolder = base and base:WaitForChild("_gcb92a91", 5)
-        return gFolder and gFolder:WaitForChild("HoneyFeatureActionButtons", 5)
-    end)
-    return res
-end
+    -- ScreenGui
+    local sg = Instance.new("ScreenGui")
+    sg.Name = name
+    sg.Parent = CoreGui
+    sg.ResetOnSpawn = false
 
-local TargetFolder = getTargetFolder()
-if not TargetFolder then 
-    warn("[-] Путь не найден") 
-    return 
-end
+    -- Button (минималистичный дизайн)
+    local btn = Instance.new("TextButton")
+    btn.Name = name .. "Btn"
+    btn.Text = text
+    btn.Size = UDim2.new(0, controller.sizeX, 0, controller.sizeY)
+    btn.Position = UDim2.new(0, 20, 0, 20)
+    btn.BackgroundColor3 = Color3.fromRGB(10, 6, 1)
+    btn.BackgroundTransparency = 0.5
+    btn.BorderSizePixel = 0
+    btn.TextColor3 = Color3.fromRGB(221, 214, 197)
+    btn.TextSize = 11
+    btn.Font = Enum.Font.GothamBold
+    btn.ZIndex = 41
+    btn.AnchorPoint = Vector2.new(0, 0)
+    btn.Parent = sg
 
-local function dumpInstance(obj)
-    local data = {}
-    for _, prop in ipairs(props) do
-        pcall(function()
-            local v = obj[prop]
-            if v ~= nil then
-                if typeof(v) == "Color3" then
-                    data[prop] = string.format("Color3.fromRGB(%d, %d, %d)", math.floor(v.R*255), math.floor(v.G*255), math.floor(v.B*255))
-                elseif typeof(v) == "UDim2" then
-                    data[prop] = "UDim2.new(" .. tostring(v) .. ")"
-                elseif typeof(v) == "Vector2" then
-                    data[prop] = "Vector2.new(" .. tostring(v) .. ")"
-                elseif typeof(v) == "string" then
-                    data[prop] = '"' .. v .. '"'
-                elseif typeof(v) == "EnumItem" then
-                    data[prop] = tostring(v)
-                else
-                    data[prop] = tostring(v)
-                end
+    -- Скругление
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, 14)
+    uiCorner.Name = "FeatureActionCorner"
+    uiCorner.Parent = btn
+
+    -- Обводка
+    local border = Instance.new("UIStroke")
+    border.Thickness = 0.8999999761581421
+    border.Color = Color3.fromRGB(176, 113, 23)
+    border.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    border.ZIndex = 1
+    border.Name = "UIStroke"
+    border.Parent = btn
+
+    -- Звук клика
+    local clickSound = Instance.new("Sound")
+    clickSound.SoundId = "rbxassetid://6324790483"
+    clickSound.Volume = 4
+    clickSound.Parent = btn
+
+    -- Drag vars (мультитач фикс)
+    local dragging = false
+    local dragStart
+    local startOffset
+    local activeInput = nil -- конкретный палец / мышь
+
+    local function clampUDim2(udm)
+        local s, sz = sg.AbsoluteSize, btn.AbsoluteSize
+        return UDim2.fromOffset(
+            math.clamp(udm.X.Offset, 0, s.X - sz.X),
+            math.clamp(udm.Y.Offset, 0, s.Y - sz.Y)
+        )
+    end
+
+    local function tweenTo(goal)
+        TweenService:Create(
+            btn,
+            TweenInfo.new(0.23, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            { Position = goal }
+        ):Play()
+    end
+
+    -- InputBegan
+    table.insert(controller.connections,
+        btn.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                activeInput = input
+                dragStart = input.Position
+                startOffset = btn.Position
             end
         end)
-    end
-    
-    data.Children = {}
-    for _, child in ipairs(obj:GetChildren()) do
-        table.insert(data.Children, dumpInstance(child))
-    end
-    return data
-end
+    )
 
-local function tableToString(t, indent)
-    indent = indent or ""
-    local str = "{\n"
-    for k, v in pairs(t) do
-        if k == "Children" then
-            if #v > 0 then
-                str = str .. indent .. '  ["Children"] = {\n'
-                for _, child in ipairs(v) do
-                    str = str .. indent .. "    " .. tableToString(child, indent .. "    ") .. ",\n"
-                end
-                str = str .. indent .. "  }\n"
+    -- InputEnded
+    table.insert(controller.connections,
+        UserInputService.InputEnded:Connect(function(input)
+            if input == activeInput then
+                dragging = false
+                activeInput = nil
             end
-        else
-            str = str .. indent .. '  ["' .. k .. '"] = ' .. tostring(v) .. ",\n"
+        end)
+    )
+
+    -- InputChanged
+    table.insert(controller.connections,
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging
+            and input == activeInput
+            and (
+                input.UserInputType == Enum.UserInputType.MouseMovement
+                or input.UserInputType == Enum.UserInputType.Touch
+            ) then
+                local delta = input.Position - dragStart
+                tweenTo(
+                    clampUDim2(
+                        UDim2.new(
+                            0, startOffset.X.Offset + delta.X,
+                            0, startOffset.Y.Offset + delta.Y
+                        )
+                    )
+                )
+            end
+        end)
+    )
+
+    -- Анимация нажатия
+    local baseSize = btn.Size
+    local function pressAnimation(pressed)
+        local scale = pressed and 0.95 or 1
+        TweenService:Create(
+            btn,
+            TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {
+                Size = UDim2.new(
+                    0, baseSize.X.Offset * scale,
+                    0, baseSize.Y.Offset * scale
+                )
+            }
+        ):Play()
+
+        if pressed then
+            clickSound:Play()
         end
     end
-    return str .. indent .. "}"
+
+    table.insert(controller.connections, btn.MouseButton1Down:Connect(function()
+        pressAnimation(true)
+    end))
+
+    table.insert(controller.connections, btn.MouseButton1Up:Connect(function()
+        pressAnimation(false)
+    end))
+
+    table.insert(controller.connections, btn.MouseLeave:Connect(function()
+        pressAnimation(false)
+    end))
+
+    table.insert(controller.connections, btn.MouseButton1Click:Connect(function()
+        if callback then
+            callback()
+        end
+    end))
+
+    -- API
+    function controller:setSize(x, y)
+        controller.sizeX = x
+        controller.sizeY = y
+        btn.Size = UDim2.new(0, x, 0, y)
+        baseSize = btn.Size
+    end
+
+    function controller:setCorner(value)
+        uiCorner.CornerRadius = UDim.new(0, value)
+    end
+
+    function controller:destroy()
+        for _, con in ipairs(controller.connections) do
+            if con and con.Disconnect then
+                con:Disconnect()
+            end
+        end
+        sg:Destroy()
+    end
+
+    return controller
 end
-
--- ГЛАВНОЕ ИЗМЕНЕНИЕ: Используем DescendantAdded вместо ChildAdded
-TargetFolder.DescendantAdded:Connect(function(descendant)
-    -- Небольшая задержка, чтобы объект успел полностью инициализировать свойства в CoreGui
-    task.wait(0.2)
-    
-    print("[+] Обнаружен новый объект на глубине: " .. descendant:GetFullName())
-    
-    local success, dumpedData = pcall(dumpInstance, descendant)
-    if success and dumpedData then
-        local finalString = tableToString(dumpedData)
-        
-        if setclipboard then
-            setclipboard(finalString)
-            print("[*] Свойства объекта и его под-ветки скопированы в буфер!")
-        else
-            print(finalString)
-            warn("[-] setclipboard не поддерживается.")
-        end
-    else
-        warn("[-] Ошибка дампа для: " .. descendant.Name)
+local GGcon
+savedGG = {
+    x = 120,
+    y = 50,
+    cor = 20,
+}
+GGcon = createButton(
+    "Grabgun",
+    "Grab gun",
+    savedGG.x,
+    savedGG.y,
+    savedGG.cor,
+    function()
+        print(1)
     end
-end)
-
-print("[!] Тотальный мониторинг запущен. Слушаю всё дерево внутри: " .. TargetFolder:GetFullName())
+)

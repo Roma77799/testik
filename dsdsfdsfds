@@ -10,7 +10,7 @@ local function getTargetFolder()
         local buttons = gFolder:WaitForChild("HoneyFeatureActionButtons", 5)
         if not buttons then return nil end
         -- Если это конечная кнопка, мы мониторим её детей, либо саму папку кнопок
-        return buttons:WaitForChild("FeatureAction_Misc__Toy__custom_fakebomb_use", 5)
+        return buttons
     end)
     return success and res or nil
 end

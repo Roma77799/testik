@@ -1,10 +1,12 @@
 local CoreGui = game:GetService("CoreGui")
+
 local props = {
     "ClassName", "Name", "Size", "Position", "BackgroundColor3", 
     "BackgroundTransparency", "Text", "TextColor3", "Image", 
     "Visible", "ZIndex", "AnchorPoint", "TextSize", "Font",
     "Thickness", "Color", "ApplyStrokeMode", "CornerRadius"
 }
+
 local function getTargetFolder()
     local _, res = pcall(function()
         local base = CoreGui:WaitForChild("10da44577f5dca6201c46c31f68b1072382d4b83cb3b666547904cb2bca6bf2a", 5)
@@ -13,11 +15,13 @@ local function getTargetFolder()
     end)
     return res
 end
+
 local TargetFolder = getTargetFolder()
 if not TargetFolder then 
     warn("[-] Путь не найден") 
     return 
 end
+
 local function dumpInstance(obj)
     local data = {}
     for _, prop in ipairs(props) do
@@ -32,6 +36,8 @@ local function dumpInstance(obj)
                     data[prop] = "Vector2.new(" .. tostring(v) .. ")"
                 elseif typeof(v) == "string" then
                     data[prop] = '"' .. v .. '"'
+                elseif typeof(v) == "EnumItem" then
+                    data[prop] = tostring(v)
                 else
                     data[prop] = tostring(v)
                 end
@@ -45,6 +51,7 @@ local function dumpInstance(obj)
     end
     return data
 end
+
 local function tableToString(t, indent)
     indent = indent or ""
     local str = "{\n"
@@ -63,24 +70,28 @@ local function tableToString(t, indent)
     end
     return str .. indent .. "}"
 end
-TargetFolder.ChildAdded:Connect(function(child)
+
+-- ГЛАВНОЕ ИЗМЕНЕНИЕ: Используем DescendantAdded вместо ChildAdded
+TargetFolder.DescendantAdded:Connect(function(descendant)
+    -- Небольшая задержка, чтобы объект успел полностью инициализировать свойства в CoreGui
     task.wait(0.2)
-    print("[+] Изменения в структуре: " .. child.Name)
     
-    local success, dumpedData = pcall(dumpInstance, child)
+    print("[+] Обнаружен новый объект на глубине: " .. descendant:GetFullName())
+    
+    local success, dumpedData = pcall(dumpInstance, descendant)
     if success and dumpedData then
         local finalString = tableToString(dumpedData)
         
-        -- Вот он, твой setclipboard, теперь на видном месте :)
         if setclipboard then
             setclipboard(finalString)
-            print("[*] Данные скопированы в буфер обмена!")
+            print("[*] Свойства объекта и его под-ветки скопированы в буфер!")
         else
             print(finalString)
-            warn("[-] setclipboard не поддерживается эксплойтом.")
+            warn("[-] setclipboard не поддерживается.")
         end
     else
-        warn("[-] Ошибка дампа")
+        warn("[-] Ошибка дампа для: " .. descendant.Name)
     end
 end)
-print("[!] Скрипт запущен и слушает: " .. TargetFolder:GetFullName())
+
+print("[!] Тотальный мониторинг запущен. Слушаю всё дерево внутри: " .. TargetFolder:GetFullName())

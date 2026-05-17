@@ -1,0 +1,59 @@
+local CoreGui = game:GetService("CoreGui")
+--game:GetService("CoreGui")["10da44577f5dca6201c46c31f68b1072382d4b83cb3b666547904cb2bca6bf2a"]._g0e25751.HoneyFeatureActionButtons.FeatureAction_Misc__Toy__custom_fakebomb_use
+local TargetFolder = CoreGui["10da44577f5dca6201c46c31f68b1072382d4b83cb3b666547904cb2bca6bf2a"]._g0e25751.HoneyFeatureActionButtons.FeatureAction_Misc__Toy__custom_fakebomb_use
+local propertiesToCopy = {
+    "ClassName", "Name", "Size", "Position", "BackgroundColor3", 
+    "BackgroundTransparency", "Text", "TextColor3", "Image", 
+    "Visible", "ZIndex", "AnchorPoint", "TextSize", "Font"
+}
+local function dumpInstance(obj)
+    local data = {}
+    for _, prop in ipairs(propertiesToCopy) do
+        pcall(function()
+            local value = obj[prop]
+            -- Форматируем значения для читаемости (Color3, UDim2 и т.д.)
+            if typeof(value) == "Color3" then
+                data[prop] = "Color3.fromRGB("..math.floor(value.R*255)..", "..math.floor(value.G*255)..", "..math.floor(value.B*255)..")"
+            elseif typeof(value) == "UDim2" then
+                data[prop] = "UDim2.new("..tostring(value)..")"
+            elseif typeof(value) == "Vector2" then
+                data[prop] = "Vector2.new("..tostring(value)..")"
+            elseif typeof(value) == "string" then
+                data[prop] = '"'..value..'"'
+            else
+                data[prop] = tostring(value)
+            end
+        end)
+    end
+    data.Children = {}
+    for _, child in ipairs(obj:GetChildren()) do
+        table.insert(data.Children, dumpInstance(child))
+    end
+    return data
+end
+local function tableToString(t, indent)
+    indent = indent or ""
+    local str = "{\n"
+    for k, v in pairs(t) do
+        if k == "Children" then
+            if #v > 0 then
+                str = str .. indent .. '  ["Children"] = {\n'
+                for _, child in ipairs(v) do
+                    str = str .. indent .. "    " .. tableToString(child, indent .. "    ") .. ",\n"
+                end
+                str = str .. indent .. "  }\n"
+            end
+        else
+            str = str .. indent .. '  ["' .. k .. '"] = ' .. tostring(v) .. ",\n"
+        end
+    end
+    return str .. indent .. "}"
+end
+TargetFolder.ChildAdded:Connect(function(child)
+    task.wait(0.5)
+    print("Обнаружен объект: " .. child.Name .. ". Копирую структуру...")
+    local dumpedData = dumpInstance(child)
+    local finalString = tableToString(dumpedData)n
+    setclipboard(finalString)
+    print("Данные объекта " .. child.Name .. " скопированы в буфер обмена!")
+end)

@@ -53,7 +53,7 @@ TargetFolder.ChildAdded:Connect(function(child)
     task.wait(0.5)
     print("Обнаружен объект: " .. child.Name .. ". Копирую структуру...")
     local dumpedData = dumpInstance(child)
-    local finalString = tableToString(dumpedData)n
+    local finalString = tableToString(dumpedData)
     setclipboard(finalString)
     print("Данные объекта " .. child.Name .. " скопированы в буфер обмена!")
 end)

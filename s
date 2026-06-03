@@ -37,11 +37,6 @@ local function trimName(s)
 	return (s or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
-local function isBombName(name)
-	name = string.lower(name or "")
-	return name == "bomb" or string.find(name, "bomb", 1, true) ~= nil
-end
-
 local function getFarmer()
 	local query = trimName(farmerName)
 	if query == "" then
@@ -60,29 +55,32 @@ local function getFarmer()
 	return nil
 end
 
-local function containerHasBomb(container)
+-- Только Tool с именем Bomb в Character или Backpack (не UI, не части карты)
+local function findBombTool(container)
 	if not container then
-		return false
+		return nil
 	end
-	for _, d in ipairs(container:GetDescendants()) do
-		if isBombName(d.Name) then
-			return true
+	for _, child in ipairs(container:GetChildren()) do
+		if child:IsA("Tool") and child.Name == "Bomb" then
+			return child
 		end
 	end
-	return false
+	for _, desc in ipairs(container:GetDescendants()) do
+		if desc:IsA("Tool") and desc.Name == "Bomb" then
+			return desc
+		end
+	end
+	return nil
 end
 
 local function playerHasBomb(plr)
 	if not plr then
 		return false
 	end
-	if containerHasBomb(plr.Character) then
+	if findBombTool(plr.Character) then
 		return true
 	end
-	if containerHasBomb(plr.Backpack) then
-		return true
-	end
-	if containerHasBomb(plr:FindFirstChildOfClass("PlayerGui")) then
+	if findBombTool(plr.Backpack) then
 		return true
 	end
 	return false
@@ -380,22 +378,34 @@ local function waitForFullCharacter(plr, timeout)
 	return false
 end
 
-local function waitForBomb()
+local function waitUntilNoBomb()
+	setStatus("Жду пока бомбы нет (Tool)...")
+	while running do
+		if not anyoneHasBomb() then
+			return true
+		end
+		task.wait(POLL)
+	end
+	return false
+end
+
+local function waitForBombAppear()
 	local heartbeat = 0
-	setStatus("Жду бомбу (ты или фармер)...")
+	setStatus("Жду Tool Bomb (ты / фармер)...")
 	while running do
 		local has, who = anyoneHasBomb()
 		if has then
 			setStatus("Бомба " .. who)
+			log("Tool Bomb", who)
 			return true
 		end
 		if tick() - heartbeat >= 4 then
 			heartbeat = tick()
 			refreshFarmerSpot()
 			if farmerSpot then
-				setStatus("Жду бомбу | " .. farmerSpot.arena .. " " .. farmerSpot.farmerSide)
+				setStatus("Жду Bomb | " .. farmerSpot.arena)
 			else
-				setStatus("Жду бомбу | фармер не на арене")
+				setStatus("Жду Bomb | фармер не на арене")
 			end
 			debugBombState()
 		end
@@ -483,9 +493,9 @@ local function touchReadyButton()
 		return false
 	end
 
-	log("Hull touch OK, жду 2 сек перед Ready...")
-	setStatus("Жду 2 сек → Ready...")
-	task.wait(2)
+	log("Hull touch OK, жду 3 сек перед Ready...")
+	setStatus("Жду 3 сек → Ready...")
+	task.wait(3)
 	local ok, err = pcall(function()
 		ArenaReady:FireServer(true)
 	end)
@@ -496,24 +506,31 @@ local function touchReadyButton()
 	return true
 end
 
--- После Ready: ждём бомбу и 5 раз RegisterDied
+-- После Ready: сначала нет бомбы → появилась Tool Bomb → смерть (5 раз)
 local function runFiveBombDetects()
 	for i = 1, DIE_COUNT do
 		if not running then
 			return false
 		end
-		if not waitForBomb() then
+
+		if not waitForBombAppear() then
 			return false
 		end
 
 		setStatus("Бомба " .. i .. "/" .. DIE_COUNT)
-		log("Детект бомбы", i, "/", DIE_COUNT, "→ RegisterDied")
+		log("Детект Tool Bomb", i, "/", DIE_COUNT, "→ RegisterDied")
 		local ok, err = pcall(fireRegisterDied)
 		if not ok then
 			log("RegisterDied:", err)
 		end
 		waitForFullCharacter(LocalPlayer, 25)
 		task.wait(0.3)
+
+		if i < DIE_COUNT then
+			if not waitUntilNoBomb() then
+				return false
+			end
+		end
 	end
 	return true
 end
@@ -555,8 +572,12 @@ local function farmLoop()
 			continue
 		end
 
-		setStatus("Ready OK — жду бомбу...")
-		log("Ready OK — ожидание бомбы x" .. DIE_COUNT)
+		setStatus("Ready OK — жду старт раунда...")
+		log("Ready OK — сброс ложной бомбы, потом ждём Tool Bomb x" .. DIE_COUNT)
+
+		if not waitUntilNoBomb() then
+			break
+		end
 
 		if not runFiveBombDetects() then
 			break

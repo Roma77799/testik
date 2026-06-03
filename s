@@ -14,30 +14,49 @@ local selectedArena = "Arena2"
 local farmerName = ""
 local arenaBillboards = {}
 local arenasChildAddedConn = nil
+local setStatus = function() end
 
 local RegisterDied = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Replicator"):WaitForChild("RegisterDied")
 local ArenaReady = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Arena"):WaitForChild("Ready")
 
 local function log(msg)
 	warn("[ArenaFarm] " .. tostring(msg))
+	print("[ArenaFarm] " .. tostring(msg))
+end
+
+local function trimName(s)
+	return (s or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function isBombName(name)
+	name = string.lower(name or "")
+	return name == "bomb" or string.find(name, "bomb", 1, true) ~= nil
 end
 
 local function getFarmer()
-	if farmerName == "" then
+	local query = trimName(farmerName)
+	if query == "" then
 		return nil
 	end
-	return Players:FindFirstChild(farmerName)
+	local exact = Players:FindFirstChild(query)
+	if exact then
+		return exact
+	end
+	local q = string.lower(query)
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if string.lower(plr.Name) == q or string.lower(plr.DisplayName) == q then
+			return plr
+		end
+	end
+	return nil
 end
 
 local function containerHasBomb(container)
 	if not container then
 		return false
 	end
-	if container:FindFirstChild("Bomb", true) then
-		return true
-	end
 	for _, d in ipairs(container:GetDescendants()) do
-		if d.Name == "Bomb" then
+		if isBombName(d.Name) then
 			return true
 		end
 	end
@@ -48,35 +67,96 @@ local function playerHasBomb(plr)
 	if not plr then
 		return false
 	end
-	return containerHasBomb(plr.Character) or containerHasBomb(plr.Backpack)
-end
-
-local function anyoneHasBomb()
-	if playerHasBomb(LocalPlayer) then
-		return true, "local"
+	if containerHasBomb(plr.Character) then
+		return true
 	end
-	local farmer = getFarmer()
-	if farmer and playerHasBomb(farmer) then
-		return true, "farmer"
+	if containerHasBomb(plr.Backpack) then
+		return true
+	end
+	if containerHasBomb(plr:FindFirstChildOfClass("PlayerGui")) then
+		return true
 	end
 	return false
 end
 
-local function waitForFullCharacter(plr)
+local function anyoneHasBomb()
+	if playerHasBomb(LocalPlayer) then
+		return true, "у тебя"
+	end
+	local farmer = getFarmer()
+	if farmer and playerHasBomb(farmer) then
+		return true, "у " .. farmer.Name
+	end
+	return false, nil
+end
+
+local function fireRegisterDied()
+	if RegisterDied:IsA("RemoteEvent") then
+		RegisterDied:FireServer()
+	elseif RegisterDied:IsA("RemoteFunction") then
+		RegisterDied:InvokeServer()
+	else
+		error("RegisterDied: неизвестный тип " .. RegisterDied.ClassName)
+	end
+end
+
+local function debugBombState()
+	local farmer = getFarmer()
+	local has, who = anyoneHasBomb()
+	log("--- диагностика ---")
+	log("Арена:", selectedArena, "| Автофарм:", running and "ВКЛ" or "ВЫКЛ")
+	log("Фармер:", farmer and farmer.Name or "НЕ НАЙДЕН", "| введено:", farmerName)
+	log("Бомба у тебя:", playerHasBomb(LocalPlayer) and "ДА" or "нет")
+	log("Бомба у фармера:", farmer and (playerHasBomb(farmer) and "ДА" or "нет") or "—")
+	log("Итог:", has and ("бомба " .. who) or "бомбы нет — скрипт ЖДЁТ")
+	log("Hull:", getReadyHull() and "найден" or "НЕТ")
+end
+
+local function waitForFullCharacter(plr, timeout)
 	plr = plr or LocalPlayer
+	timeout = timeout or 25
+	local deadline = tick() + timeout
 	if not plr.Character then
-		plr.CharacterAdded:Wait()
+		local ok = pcall(function()
+			plr.CharacterAdded:Wait()
+		end)
+		if not ok and tick() > deadline then
+			return false
+		end
 	end
-	local char = plr.Character
-	char:WaitForChild("Humanoid", 20)
-	char:WaitForChild("HumanoidRootPart", 20)
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	if hum then
-		repeat
-			task.wait()
-		until hum.Health > 0
+	while tick() < deadline do
+		local char = plr.Character
+		if char then
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hum and hrp and hum.Health > 0 then
+				task.wait(0.25)
+				return true
+			end
+		end
+		task.wait(0.1)
 	end
-	task.wait(0.25)
+	log("Таймаут респавна")
+	return false
+end
+
+local function waitForBomb()
+	local heartbeat = 0
+	setStatus("Жду бомбу (ты или фармер)...")
+	while running do
+		local has, who = anyoneHasBomb()
+		if has then
+			setStatus("Бомба " .. who)
+			return true
+		end
+		if tick() - heartbeat >= 4 then
+			heartbeat = tick()
+			setStatus("Жду бомбу... " .. trimName(farmerName))
+			debugBombState()
+		end
+		task.wait(POLL)
+	end
+	return false
 end
 
 local function getReadyHull()
@@ -152,46 +232,45 @@ local function doFiveDeaths()
 		if not running then
 			return
 		end
-
-		if not anyoneHasBomb() then
-			repeat
-				task.wait(POLL)
-			until anyoneHasBomb() or not running
-		end
-		if not running then
+		if not waitForBomb() then
 			return
 		end
 
+		setStatus("Смерть " .. i .. "/" .. DIE_COUNT)
 		log("Смерть " .. i .. "/" .. DIE_COUNT)
-		pcall(function()
-			RegisterDied:FireServer()
-		end)
-		waitForFullCharacter(LocalPlayer)
+		local ok, err = pcall(fireRegisterDied)
+		if not ok then
+			log("RegisterDied ошибка:", err)
+		end
+		waitForFullCharacter(LocalPlayer, 25)
 		task.wait(0.2)
 	end
 end
 
 local function farmLoop()
+	log("Цикл автофарма запущен")
+	debugBombState()
+
 	while running do
-		if not anyoneHasBomb() then
-			repeat
-				task.wait(POLL)
-			until anyoneHasBomb() or not running
-		end
-		if not running then
+		if not waitForBomb() then
 			break
 		end
 
-		log("Бомба найдена — цикл x" .. DIE_COUNT)
+		log("Бомба найдена — " .. DIE_COUNT .. " смертей")
 		doFiveDeaths()
 		if not running then
 			break
 		end
 
+		setStatus("Ready: " .. selectedArena)
 		log("Ready: " .. selectedArena)
-		touchReadyButton()
+		local readyOk = touchReadyButton()
+		if not readyOk then
+			setStatus("Ошибка Ready / Hull")
+		end
 		task.wait(0.5)
 	end
+	setStatus("Автофарм выключен")
 	log("Автофарм выключен")
 end
 
@@ -313,8 +392,8 @@ sg.Parent = guiParent
 
 local main = Instance.new("Frame")
 main.Name = "Main"
-main.Size = UDim2.new(0, 220, 0, 312)
-main.Position = UDim2.new(0, 12, 0.5, -156)
+main.Size = UDim2.new(0, 220, 0, 336)
+main.Position = UDim2.new(0, 12, 0.5, -168)
 main.BackgroundColor3 = Color3.fromRGB(28, 28, 32)
 main.BorderSizePixel = 0
 main.Parent = sg
@@ -411,9 +490,12 @@ local nbc = Instance.new("UICorner")
 nbc.CornerRadius = UDim.new(0, 6)
 nbc.Parent = nameBox
 
-nameBox.FocusLost:Connect(function()
-	farmerName = nameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
-end)
+local function syncFarmerName()
+	farmerName = trimName(nameBox.Text)
+end
+
+nameBox:GetPropertyChangedSignal("Text"):Connect(syncFarmerName)
+nameBox.FocusLost:Connect(syncFarmerName)
 
 local namesToggleBtn = Instance.new("TextButton")
 namesToggleBtn.Size = UDim2.new(1, -12, 0, 32)
@@ -459,35 +541,63 @@ tbc.CornerRadius = UDim.new(0, 6)
 tbc.Parent = toggleBtn
 
 local status = Instance.new("TextLabel")
-status.Size = UDim2.new(1, -12, 0, 0)
-status.Visible = false
+status.Size = UDim2.new(1, -12, 0, 36)
+status.Position = UDim2.new(0, 6, 0, 300)
+status.BackgroundColor3 = Color3.fromRGB(38, 38, 46)
+status.BackgroundTransparency = 0.2
+status.BorderSizePixel = 0
+status.Font = Enum.Font.Gotham
+status.TextSize = 10
+status.TextColor3 = Color3.fromRGB(200, 210, 220)
+status.TextWrapped = true
+status.Text = "Статус: выкл"
 status.Parent = main
+local sbc = Instance.new("UICorner")
+sbc.CornerRadius = UDim.new(0, 6)
+sbc.Parent = status
+
+setStatus = function(text)
+	status.Text = "Статус: " .. tostring(text)
+	log(text)
+end
 
 toggleBtn.MouseButton1Click:Connect(function()
-	farmerName = nameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+	syncFarmerName()
 	running = not running
 	if running then
 		if farmerName == "" then
-			log("Впиши имя фармящего")
+			setStatus("Впиши имя фармящего")
 			running = false
 			return
 		end
-		if not getFarmer() then
-			log("Игрок не в игре: " .. farmerName)
+		local farmer = getFarmer()
+		if not farmer then
+			setStatus("Игрок не найден: " .. farmerName)
+			log("Игрок не в игре. Players:")
+			for _, p in ipairs(Players:GetPlayers()) do
+				log(" -", p.Name, "/", p.DisplayName)
+			end
 			running = false
 			return
 		end
 		if not firetouchinterest then
-			log("Нужен firetouchinterest")
+			setStatus("Нет firetouchinterest")
+			running = false
+			return
+		end
+		if not getReadyHull() then
+			setStatus("Нет Hull для " .. selectedArena)
 			running = false
 			return
 		end
 		toggleBtn.Text = "Автофарм: ВКЛ"
 		toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 140, 80)
+		setStatus("Старт. Жду бомбу...")
 		task.spawn(farmLoop)
 	else
 		toggleBtn.Text = "Автофарм: ВЫКЛ"
 		toggleBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+		setStatus("Выключен")
 	end
 end)
 

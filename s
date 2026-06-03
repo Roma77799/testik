@@ -404,33 +404,26 @@ local function waitForBomb()
 	return false
 end
 
-local function touchReadyButton()
-	refreshFarmerSpot()
+-- Тот же порядок, что в твоём рабочем ArenaTouch-скрипте
+local function touchHull(hull)
 	if not firetouchinterest then
-		log("Нет firetouchinterest")
-		return false
+		return false, "нет firetouchinterest"
+	end
+	if not hull or not hull:IsA("BasePart") then
+		return false, "Hull не BasePart"
 	end
 
-	local char = LocalPlayer.Character
+	local player = LocalPlayer
+	local char = player.Character
 	if not char then
-		return false
+		return false, "нет Character"
 	end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local hrp = char:WaitForChild("HumanoidRootPart", 8)
 	if not hrp then
-		return false
+		return false, "нет HumanoidRootPart"
 	end
 
-	local hull = getReadyHull()
-	if not hull then
-		if farmerSpot then
-			log("Hull не найден:", farmerSpot.arena, farmerSpot.ourSide, "1")
-		else
-			log("Фармер не найден на Statsboard — Ready невозможен")
-		end
-		return false
-	end
-	log("Ready Hull:", hull:GetFullName())
-
+	log("Hull:", hull:GetFullName())
 	hrp.CFrame = hull.CFrame + Vector3.new(0, 3, 0)
 	task.wait(0.15)
 
@@ -443,77 +436,135 @@ local function touchReadyButton()
 	pcall(function()
 		touchPair(hull, hrp)
 	end)
-	task.wait(0.1)
+	task.wait(0.2)
 	pcall(function()
 		touchPair(hrp, hull)
 	end)
-	task.wait(0.15)
+	task.wait(0.2)
 
+	return true
+end
+
+local function ensureAliveForTouch()
+	local char = LocalPlayer.Character
+	if char then
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hrp and hum and hum.Health > 0 then
+			return true
+		end
+	end
+	return waitForFullCharacter(LocalPlayer, 20)
+end
+
+local function touchReadyButton()
+	refreshFarmerSpot()
+
+	if not ensureAliveForTouch() then
+		log("touchReady: персонаж не готов")
+		return false
+	end
+
+	local hull = getReadyHull()
+	if not hull then
+		if farmerSpot then
+			log("Hull не найден:", farmerSpot.arena, farmerSpot.ourSide, "1")
+		else
+			log("Фармер не на Statsboard")
+		end
+		return false
+	end
+
+	setStatus("ТП к Hull...")
+	local touchOk, touchErr = touchHull(hull)
+	if not touchOk then
+		log("touchHull:", touchErr)
+		setStatus("Ошибка touch: " .. tostring(touchErr))
+		return false
+	end
+
+	log("Hull touch OK, Ready FireServer")
 	local ok, err = pcall(function()
 		ArenaReady:FireServer(true)
 	end)
 	if not ok then
-		log("Ready: " .. tostring(err))
+		log("Ready:", err)
 		return false
 	end
 	return true
 end
 
-local function doFiveDeaths()
+-- После Ready: ждём бомбу и 5 раз RegisterDied
+local function runFiveBombDetects()
 	for i = 1, DIE_COUNT do
 		if not running then
-			return
+			return false
 		end
 		if not waitForBomb() then
-			return
+			return false
 		end
 
-		setStatus("Смерть " .. i .. "/" .. DIE_COUNT)
-		log("Смерть " .. i .. "/" .. DIE_COUNT)
+		setStatus("Бомба " .. i .. "/" .. DIE_COUNT)
+		log("Детект бомбы", i, "/", DIE_COUNT, "→ RegisterDied")
 		local ok, err = pcall(fireRegisterDied)
 		if not ok then
-			log("RegisterDied ошибка:", err)
+			log("RegisterDied:", err)
 		end
 		waitForFullCharacter(LocalPlayer, 25)
-		task.wait(0.2)
+		task.wait(0.3)
 	end
+	return true
 end
 
+local function waitForFarmerOnArena()
+	while running do
+		local spot = refreshFarmerSpot()
+		if spot then
+			return spot
+		end
+		setStatus("Жду фармера в слоте...")
+		task.wait(1)
+	end
+	return nil
+end
+
+--[[
+  Порядок круга:
+  1) Найти фармера на Statsboard
+  2) Hull (firetouchinterest) + Ready FireServer(true)
+  3) Ждать бомбу у себя или фармера → 5 детектов (смерть)
+  4) Снова с шага 1 (если фармер ещё на арене)
+]]
 local function farmLoop()
 	log("Цикл автофарма запущен")
-	local spot = refreshFarmerSpot()
-	if not spot then
-		setStatus("Фармер не на арене (Statsboard)")
-		log("Фармер не найден ни на одной из 6 арен")
-	else
-		setStatus(spot.arena .. " " .. spot.farmerSide .. " → Ready " .. spot.ourSide)
-		log("Найден:", spot.labelText, "|", spot.arena, spot.farmerSide, spot.slot)
-	end
-	debugBombState()
 
 	while running do
-		if not waitForBomb() then
+		local spot = waitForFarmerOnArena()
+		if not spot or not running then
 			break
 		end
 
-		log("Бомба найдена — " .. DIE_COUNT .. " смертей")
-		doFiveDeaths()
-		if not running then
+		log("Фармер:", spot.labelText, "|", spot.arena, spot.farmerSide, ".", spot.slot)
+		setStatus(spot.arena .. " → Hull " .. spot.ourSide .. ".1")
+
+		if not touchReadyButton() then
+			setStatus("Hull/Ready ошибка — повтор...")
+			task.wait(1)
+			continue
+		end
+
+		setStatus("Ready OK — жду бомбу...")
+		log("Ready OK — ожидание бомбы x" .. DIE_COUNT)
+
+		if not runFiveBombDetects() then
 			break
 		end
 
-		refreshFarmerSpot()
-		local readyLabel = farmerSpot
-			and (farmerSpot.arena .. " Ready " .. farmerSpot.ourSide .. ".1")
-			or "?"
-		setStatus("Ready: " .. readyLabel)
-		log("Ready:", readyLabel)
-		local readyOk = touchReadyButton()
-		if not readyOk then
-			setStatus("Ошибка Ready / Hull")
-		end
+		log("5 детектов — новый круг")
+		setStatus("Круг завершён — ищу фармера...")
 		task.wait(0.5)
 	end
+
 	setStatus("Автофарм выключен")
 	log("Автофарм выключен")
 end
@@ -778,22 +829,9 @@ toggleBtn.MouseButton1Click:Connect(function()
 			running = false
 			return
 		end
-		local spot = refreshFarmerSpot()
-		if not spot then
-			setStatus("Фармер не на арене — зайди в слот")
-			log("Нет на Statsboard. Формат в игре: (@ник)")
-			debugScanUsernames()
-			running = false
-			return
-		end
-		if not getReadyHull() then
-			setStatus("Нет Hull " .. spot.ourSide .. ".1")
-			running = false
-			return
-		end
 		toggleBtn.Text = "Автофарм: ВКЛ"
 		toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 140, 80)
-		setStatus(spot.arena .. " → Ready " .. spot.ourSide .. ".1")
+		setStatus("Старт — ищу фармера...")
 		task.spawn(farmLoop)
 	else
 		toggleBtn.Text = "Автофарм: ВЫКЛ"

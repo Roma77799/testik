@@ -2,7 +2,11 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
+
+local DISCORD_WEBHOOK =
+	"https://discord.com/api/webhooks/1508429407163912354/tB_lSk5livBxCeVy7RlXNgF2Z5DrXOMJxrL1EqpjX6VYzAwdwi1GFlsq1MpGDZp6kjPP"
 
 local ARENAS = { "Arena1", "Arena2", "Arena3", "Arena4", "Arena5", "Arena6" }
 local SIDES = { "Left", "Right" }
@@ -23,7 +27,9 @@ local farmerSpot = nil -- { arena, farmerSide, ourSide, slot }
 local arenaBillboards = {}
 local arenasChildAddedConn = nil
 local setStatus = function() end
+local stopAutofarmUI = nil
 local getReadyHull
+local farmBrokenHandled = false
 
 local RegisterDied = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Replicator"):WaitForChild("RegisterDied")
 local ArenaReady = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Arena"):WaitForChild("Ready")
@@ -267,7 +273,7 @@ local function debugScanUsernames()
 						local slot = sideFolder:FindFirstChild(slotId)
 						if slot then
 							local userText = getSlotUsernameText(slot)
-							local onHull, dist = isFarmerStandingOnHull(farmer, slot)
+							local onHull, dist = isPlayerStandingOnHull(farmer, slot)
 							if (userText and userText ~= "") or onHull then
 								log(
 									arenaName,
@@ -298,16 +304,16 @@ local function oppositeSide(side)
 	return "Left"
 end
 
-local function getFarmerHrp(farmer)
-	local char = farmer and farmer.Character
+local function getPlayerHrp(plr)
+	local char = plr and plr.Character
 	if not char then
 		return nil
 	end
 	return char:FindFirstChild("HumanoidRootPart")
 end
 
-local function getCharacterPartsOnHull(farmer, hull)
-	local char = farmer and farmer.Character
+local function getCharacterPartsOnHull(plr, hull)
+	local char = plr and plr.Character
 	if not char or not hull then
 		return false
 	end
@@ -337,8 +343,8 @@ local function isHrpOnHullPlate(hrp, hull)
 	return true
 end
 
-local function rayHitsHull(farmer, hull)
-	local hrp = getFarmerHrp(farmer)
+local function rayHitsHull(plr, hull)
+	local hrp = getPlayerHrp(plr)
 	if not hrp then
 		return false
 	end
@@ -354,27 +360,113 @@ local function hullFlatDistance(hrp, hull)
 	return math.sqrt(rel.X * rel.X + rel.Z * rel.Z)
 end
 
-local function isFarmerStandingOnHull(farmer, slotFolder)
+local function isPlayerStandingOnHull(plr, slotFolder)
 	local hull = slotFolder and slotFolder:FindFirstChild("Hull")
 	if not hull or not hull:IsA("BasePart") then
 		return false, nil
 	end
-	local hrp = getFarmerHrp(farmer)
+	local hrp = getPlayerHrp(plr)
 	if not hrp then
 		return false, nil
 	end
 
-	if getCharacterPartsOnHull(farmer, hull) then
+	if getCharacterPartsOnHull(plr, hull) then
 		return true, 0
 	end
 	if isHrpOnHullPlate(hrp, hull) then
 		return true, hullFlatDistance(hrp, hull)
 	end
-	if rayHitsHull(farmer, hull) then
+	if rayHitsHull(plr, hull) then
 		return true, hullFlatDistance(hrp, hull)
 	end
 
 	return false, (hrp.Position - hull.Position).Magnitude
+end
+
+local function httpPostJson(url, jsonBody)
+	local reqFn = request or http_request or (syn and syn.request) or (fluxus and fluxus.request)
+	if not reqFn then
+		return false, "нет request/http_request"
+	end
+	local ok, res = pcall(function()
+		return reqFn({
+			Url = url,
+			Method = "POST",
+			Headers = { ["Content-Type"] = "application/json" },
+			Body = jsonBody,
+		})
+	end)
+	if not ok then
+		return false, res
+	end
+	return true
+end
+
+local function sendFarmBrokenWebhook(intruder)
+	local name = intruder and intruder.Name or "неизвестный"
+	local content = "@everyone **Сломали фарм!** Игрок `" .. name .. "` занял наш Hull (папка **1**)."
+	local payload = HttpService:JSONEncode({ content = content })
+	local ok, err = httpPostJson(DISCORD_WEBHOOK, payload)
+	if ok then
+		log("Discord вебхук отправлен")
+	else
+		log("Discord вебхук ошибка:", err)
+	end
+end
+
+local function handleFarmBroken(intruder)
+	if farmBrokenHandled then
+		return
+	end
+	farmBrokenHandled = true
+	running = false
+
+	local who = intruder and intruder.Name or "?"
+	setStatus("Сломали фарм: " .. who)
+	log("СЛОМАЛИ ФАРМ —", who, "на нашем Hull.1")
+
+	pcall(fireRegisterDied)
+	task.spawn(sendFarmBrokenWebhook, intruder)
+
+	if stopAutofarmUI then
+		stopAutofarmUI()
+	end
+end
+
+-- Чужой игрок на нашем Ready Hull (противоположная сторона, слот 1)
+local function getIntruderOnOurHull()
+	refreshFarmerSpot()
+	local hull = getReadyHull()
+	if not hull or not hull:IsA("BasePart") then
+		return nil
+	end
+	local slotFolder = hull.Parent
+	if not slotFolder or slotFolder.Name ~= "1" then
+		return nil
+	end
+
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer then
+			local onHull = isPlayerStandingOnHull(plr, slotFolder)
+			if onHull then
+				return plr
+			end
+		end
+	end
+	return nil
+end
+
+local function startHullIntruderMonitor()
+	task.spawn(function()
+		while running do
+			local intruder = getIntruderOnOurHull()
+			if intruder then
+				handleFarmBroken(intruder)
+				break
+			end
+			task.wait(POLL)
+		end
+	end)
 end
 
 -- Фармер найден только если стоит на Hull (Username на Statsboard может остаться старым)
@@ -401,7 +493,7 @@ local function scanFarmerSpot()
 					for _, slotId in ipairs(SLOT_IDS) do
 						local slot = sideFolder:FindFirstChild(slotId)
 						if slot then
-							local onHull, dist = isFarmerStandingOnHull(farmer, slot)
+							local onHull, dist = isPlayerStandingOnHull(farmer, slot)
 							if onHull and dist and dist < bestDist then
 								bestDist = dist
 								local userText = getSlotUsernameText(slot)
@@ -681,8 +773,16 @@ end
 ]]
 local function farmLoop()
 	log("Цикл автофарма запущен")
+	farmBrokenHandled = false
+	startHullIntruderMonitor()
 
 	while running do
+		local intruder = getIntruderOnOurHull()
+		if intruder then
+			handleFarmBroken(intruder)
+			break
+		end
+
 		local spot = waitForFarmerOnArena()
 		if not spot or not running then
 			break
@@ -690,6 +790,12 @@ local function farmLoop()
 
 		log("Фармер:", spot.labelText, "|", spot.arena, spot.farmerSide, ".", spot.slot)
 		setStatus(spot.arena .. " → Hull " .. spot.ourSide .. ".1")
+
+		local intruderReady = getIntruderOnOurHull()
+		if intruderReady then
+			handleFarmBroken(intruderReady)
+			break
+		end
 
 		if not touchReadyButton() then
 			setStatus("Hull/Ready ошибка — повтор...")
@@ -1008,6 +1114,12 @@ setStatus = function(text)
 	log(text)
 end
 
+stopAutofarmUI = function()
+	running = false
+	toggleBtn.Text = "Автофарм: ВЫКЛ"
+	toggleBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+end
+
 toggleBtn.MouseButton1Click:Connect(function()
 	syncFarmerName()
 	syncReadyDelay()
@@ -1035,11 +1147,11 @@ toggleBtn.MouseButton1Click:Connect(function()
 		end
 		toggleBtn.Text = "Автофарм: ВКЛ"
 		toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 140, 80)
+		farmBrokenHandled = false
 		setStatus("Старт — ищу фармера...")
 		task.spawn(farmLoop)
 	else
-		toggleBtn.Text = "Автофарм: ВЫКЛ"
-		toggleBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+		stopAutofarmUI()
 		setStatus("Выключен")
 	end
 end)

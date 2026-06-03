@@ -9,6 +9,12 @@ local SIDES = { "Left", "Right" }
 local SLOT_IDS = { "1", "2", "3", "4" }
 local DIE_COUNT = 5
 local POLL = 0.35
+local READY_DELAY_MIN = 0.05
+local READY_DELAY_MAX = 3
+local readyDelaySeconds = 0.3
+-- Фармер должен стоять НА пластине Hull, а не рядом (не радиус 20+ studs)
+local HULL_PAD_XZ = 0.6
+local HULL_MAX_ABOVE = 6
 
 local running = false
 local showArenaNames = false
@@ -35,6 +41,14 @@ end
 
 local function trimName(s)
 	return (s or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function getReadyDelay()
+	local n = tonumber(readyDelaySeconds)
+	if not n then
+		n = 2
+	end
+	return math.clamp(n, READY_DELAY_MIN, READY_DELAY_MAX)
 end
 
 local function getFarmer()
@@ -224,7 +238,8 @@ local function labelMatchesFarmer(labelText, farmer)
 end
 
 local function debugScanUsernames()
-	log("--- все Username на аренах ---")
+	log("--- слоты: Username vs фармер на Hull ---")
+	local farmer = getFarmer()
 	local arenasFolder = workspace:FindFirstChild("Arenas")
 	if not arenasFolder then
 		return
@@ -240,8 +255,17 @@ local function debugScanUsernames()
 						local slot = sideFolder:FindFirstChild(slotId)
 						if slot then
 							local userText = getSlotUsernameText(slot)
-							if userText and userText ~= "" then
-								log(arenaName, sideName, slotId, "raw:", userText, "nick:", extractNickFromLabel(userText))
+							local onHull, dist = isFarmerStandingOnHull(farmer, slot)
+							if (userText and userText ~= "") or onHull then
+								log(
+									arenaName,
+									sideName,
+									slotId,
+									"| label:",
+									userText or "—",
+									"| на Hull:",
+									onHull and string.format("%.1f studs", dist) or "нет"
+								)
 							end
 						end
 					end
@@ -249,9 +273,9 @@ local function debugScanUsernames()
 			end
 		end
 	end
-	local farmer = getFarmer()
 	if farmer then
-		log("Ищем:", table.concat(getFarmerSearchNames(farmer), ", "))
+		log("Ищем фармера:", table.concat(getFarmerSearchNames(farmer), ", "))
+		log("На Hull = касание или HRP над пластиной (pad XZ", HULL_PAD_XZ, ")")
 	end
 end
 
@@ -262,6 +286,86 @@ local function oppositeSide(side)
 	return "Left"
 end
 
+local function getFarmerHrp(farmer)
+	local char = farmer and farmer.Character
+	if not char then
+		return nil
+	end
+	return char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getCharacterPartsOnHull(farmer, hull)
+	local char = farmer and farmer.Character
+	if not char or not hull then
+		return false
+	end
+	for _, part in ipairs(hull:GetTouchingParts()) do
+		if part:IsDescendantOf(char) then
+			return true
+		end
+	end
+	return false
+end
+
+-- HRP над пластиной: в пределах Size.X/Z и чуть выше верхней грани
+local function isHrpOnHullPlate(hrp, hull)
+	local rel = hull.CFrame:PointToObjectSpace(hrp.Position)
+	local hx = hull.Size.X * 0.5 + HULL_PAD_XZ
+	local hz = hull.Size.Z * 0.5 + HULL_PAD_XZ
+	local hy = hull.Size.Y * 0.5
+	if math.abs(rel.X) > hx or math.abs(rel.Z) > hz then
+		return false
+	end
+	if rel.Y < hy - 2 then
+		return false
+	end
+	if rel.Y > hy + HULL_MAX_ABOVE then
+		return false
+	end
+	return true
+end
+
+local function rayHitsHull(farmer, hull)
+	local hrp = getFarmerHrp(farmer)
+	if not hrp then
+		return false
+	end
+	local result = workspace:Raycast(hrp.Position, Vector3.new(0, -14, 0))
+	if not result then
+		return false
+	end
+	return result.Instance == hull or result.Instance:IsDescendantOf(hull.Parent)
+end
+
+local function hullFlatDistance(hrp, hull)
+	local rel = hull.CFrame:PointToObjectSpace(hrp.Position)
+	return math.sqrt(rel.X * rel.X + rel.Z * rel.Z)
+end
+
+local function isFarmerStandingOnHull(farmer, slotFolder)
+	local hull = slotFolder and slotFolder:FindFirstChild("Hull")
+	if not hull or not hull:IsA("BasePart") then
+		return false, nil
+	end
+	local hrp = getFarmerHrp(farmer)
+	if not hrp then
+		return false, nil
+	end
+
+	if getCharacterPartsOnHull(farmer, hull) then
+		return true, 0
+	end
+	if isHrpOnHullPlate(hrp, hull) then
+		return true, hullFlatDistance(hrp, hull)
+	end
+	if rayHitsHull(farmer, hull) then
+		return true, hullFlatDistance(hrp, hull)
+	end
+
+	return false, (hrp.Position - hull.Position).Magnitude
+end
+
+-- Фармер найден только если стоит на Hull (Username на Statsboard может остаться старым)
 local function scanFarmerSpot()
 	local farmer = getFarmer()
 	if not farmer then
@@ -271,6 +375,9 @@ local function scanFarmerSpot()
 	if not arenasFolder then
 		return nil
 	end
+
+	local bestSpot = nil
+	local bestDist = math.huge
 
 	for _, arenaName in ipairs(ARENAS) do
 		local arena = arenasFolder:FindFirstChild(arenaName)
@@ -282,14 +389,18 @@ local function scanFarmerSpot()
 					for _, slotId in ipairs(SLOT_IDS) do
 						local slot = sideFolder:FindFirstChild(slotId)
 						if slot then
-							local userText = getSlotUsernameText(slot)
-							if userText and labelMatchesFarmer(userText, farmer) then
-								return {
+							local onHull, dist = isFarmerStandingOnHull(farmer, slot)
+							if onHull and dist and dist < bestDist then
+								bestDist = dist
+								local userText = getSlotUsernameText(slot)
+								bestSpot = {
 									arena = arenaName,
 									farmerSide = sideName,
 									ourSide = oppositeSide(sideName),
 									slot = slotId,
-									labelText = userText,
+									labelText = userText or ("на Hull " .. string.format("%.1f", dist)),
+									distance = dist,
+									onHull = true,
 								}
 							end
 						end
@@ -298,7 +409,8 @@ local function scanFarmerSpot()
 			end
 		end
 	end
-	return nil
+
+	return bestSpot
 end
 
 local function refreshFarmerSpot()
@@ -342,7 +454,7 @@ local function debugBombState()
 			"1"
 		)
 	else
-		log("На аренах не найден (Statsboard Username)")
+		log("Не на пластине Hull (рядом не считается). Label на табло может быть старым")
 	end
 	log("Бомба у тебя:", playerHasBomb(LocalPlayer) and "ДА" or "нет")
 	log("Бомба у фармера:", farmer and (playerHasBomb(farmer) and "ДА" or "нет") or "—")
@@ -480,7 +592,7 @@ local function touchReadyButton()
 		if farmerSpot then
 			log("Hull не найден:", farmerSpot.arena, farmerSpot.ourSide, "1")
 		else
-			log("Фармер не на Statsboard")
+			log("Фармер не на Hull")
 		end
 		return false
 	end
@@ -493,9 +605,10 @@ local function touchReadyButton()
 		return false
 	end
 
-	log("Hull touch OK, жду 3 сек перед Ready...")
-	setStatus("Жду 3 сек → Ready...")
-	task.wait(3)
+	local delay = getReadyDelay()
+	log("Hull touch OK, жду", delay, "сек перед Ready...")
+	setStatus(string.format("Жду %.2f сек → Ready...", delay))
+	task.wait(delay)
 	local ok, err = pcall(function()
 		ArenaReady:FireServer(true)
 	end)
@@ -541,7 +654,7 @@ local function waitForFarmerOnArena()
 		if spot then
 			return spot
 		end
-		setStatus("Жду фармера в слоте...")
+		setStatus("Жду фармера на Hull...")
 		task.wait(1)
 	end
 	return nil
@@ -549,7 +662,7 @@ end
 
 --[[
   Порядок круга:
-  1) Найти фармера на Statsboard
+  1) Найти фармера на Hull (позиция HRP, не Username)
   2) Hull (firetouchinterest) + Ready FireServer(true)
   3) Ждать бомбу у себя или фармера → 5 детектов (смерть)
   4) Снова с шага 1 (если фармер ещё на арене)
@@ -710,8 +823,8 @@ sg.Parent = guiParent
 
 local main = Instance.new("Frame")
 main.Name = "Main"
-main.Size = UDim2.new(0, 220, 0, 218)
-main.Position = UDim2.new(0, 12, 0.5, -109)
+main.Size = UDim2.new(0, 220, 0, 262)
+main.Position = UDim2.new(0, 12, 0.5, -131)
 main.BackgroundColor3 = Color3.fromRGB(28, 28, 32)
 main.BorderSizePixel = 0
 main.Parent = sg
@@ -764,9 +877,51 @@ end
 nameBox:GetPropertyChangedSignal("Text"):Connect(syncFarmerName)
 nameBox.FocusLost:Connect(syncFarmerName)
 
+local readyLabel = Instance.new("TextLabel")
+readyLabel.Size = UDim2.new(1, -12, 0, 18)
+readyLabel.Position = UDim2.new(0, 6, 0, 92)
+readyLabel.BackgroundTransparency = 1
+readyLabel.Text = "Задержка Ready (сек):"
+readyLabel.Font = Enum.Font.Gotham
+readyLabel.TextSize = 12
+readyLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+readyLabel.TextXAlignment = Enum.TextXAlignment.Left
+readyLabel.Parent = main
+
+local readyBox = Instance.new("TextBox")
+readyBox.Size = UDim2.new(1, -12, 0, 26)
+readyBox.Position = UDim2.new(0, 6, 0, 112)
+readyBox.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+readyBox.Text = "2"
+readyBox.PlaceholderText = "0.05 - 3"
+readyBox.Font = Enum.Font.Gotham
+readyBox.TextSize = 13
+readyBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+readyBox.ClearTextOnFocus = false
+readyBox.Parent = main
+local rbc = Instance.new("UICorner")
+rbc.CornerRadius = UDim.new(0, 6)
+rbc.Parent = readyBox
+
+local function syncReadyDelay()
+	local n = tonumber(trimName(readyBox.Text))
+	if n then
+		readyDelaySeconds = math.clamp(n, READY_DELAY_MIN, READY_DELAY_MAX)
+		readyBox.Text = tostring(readyDelaySeconds)
+	end
+end
+
+readyBox.FocusLost:Connect(syncReadyDelay)
+readyBox:GetPropertyChangedSignal("Text"):Connect(function()
+	local n = tonumber(trimName(readyBox.Text))
+	if n then
+		readyDelaySeconds = math.clamp(n, READY_DELAY_MIN, READY_DELAY_MAX)
+	end
+end)
+
 local namesToggleBtn = Instance.new("TextButton")
 namesToggleBtn.Size = UDim2.new(1, -12, 0, 32)
-namesToggleBtn.Position = UDim2.new(0, 6, 0, 94)
+namesToggleBtn.Position = UDim2.new(0, 6, 0, 144)
 namesToggleBtn.Text = "Имена арен: ВЫКЛ"
 namesToggleBtn.Font = Enum.Font.GothamSemibold
 namesToggleBtn.TextSize = 13
@@ -794,7 +949,7 @@ end)
 
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(1, -12, 0, 36)
-toggleBtn.Position = UDim2.new(0, 6, 0, 132)
+toggleBtn.Position = UDim2.new(0, 6, 0, 182)
 toggleBtn.Text = "Автофарм: ВЫКЛ"
 toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.TextSize = 14
@@ -809,7 +964,7 @@ tbc.Parent = toggleBtn
 
 local status = Instance.new("TextLabel")
 status.Size = UDim2.new(1, -12, 0, 36)
-status.Position = UDim2.new(0, 6, 0, 174)
+status.Position = UDim2.new(0, 6, 0, 224)
 status.BackgroundColor3 = Color3.fromRGB(38, 38, 46)
 status.BackgroundTransparency = 0.2
 status.BorderSizePixel = 0
@@ -830,6 +985,7 @@ end
 
 toggleBtn.MouseButton1Click:Connect(function()
 	syncFarmerName()
+	syncReadyDelay()
 	running = not running
 	if running then
 		if farmerName == "" then
@@ -863,4 +1019,4 @@ toggleBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
-log("GUI готова. Арена определяется по фармеру на Statsboard.")
+log("GUI готова. Фармер = на пластине Hull (касание / HRP над ней).")

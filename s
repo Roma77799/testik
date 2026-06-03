@@ -28,7 +28,6 @@ local arenaBillboards = {}
 local arenasChildAddedConn = nil
 local setStatus = function() end
 local stopAutofarmUI = nil
-local getReadyHull
 local farmBrokenHandled = false
 
 local RegisterDied = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Replicator"):WaitForChild("RegisterDied")
@@ -433,42 +432,6 @@ local function handleFarmBroken(intruder)
 	end
 end
 
--- Чужой игрок на нашем Ready Hull (противоположная сторона, слот 1)
-local function getIntruderOnOurHull()
-	refreshFarmerSpot()
-	local hull = getReadyHull()
-	if not hull or not hull:IsA("BasePart") then
-		return nil
-	end
-	local slotFolder = hull.Parent
-	if not slotFolder or slotFolder.Name ~= "1" then
-		return nil
-	end
-
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr ~= LocalPlayer then
-			local onHull = isPlayerStandingOnHull(plr, slotFolder)
-			if onHull then
-				return plr
-			end
-		end
-	end
-	return nil
-end
-
-local function startHullIntruderMonitor()
-	task.spawn(function()
-		while running do
-			local intruder = getIntruderOnOurHull()
-			if intruder then
-				handleFarmBroken(intruder)
-				break
-			end
-			task.wait(POLL)
-		end
-	end)
-end
-
 -- Фармер найден только если стоит на Hull (Username на Statsboard может остаться старым)
 local function scanFarmerSpot()
 	local farmer = getFarmer()
@@ -522,7 +485,7 @@ local function refreshFarmerSpot()
 	return farmerSpot
 end
 
-getReadyHull = function()
+local function getReadyHull()
 	if not farmerSpot then
 		refreshFarmerSpot()
 	end
@@ -539,6 +502,42 @@ getReadyHull = function()
 		return hull
 	end
 	return nil
+end
+
+-- Чужой игрок на нашем Ready Hull (противоположная сторона, слот 1)
+local function getIntruderOnOurHull()
+	refreshFarmerSpot()
+	local hull = getReadyHull()
+	if not hull or not hull:IsA("BasePart") then
+		return nil
+	end
+	local slotFolder = hull.Parent
+	if not slotFolder or slotFolder.Name ~= "1" then
+		return nil
+	end
+
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer then
+			local onHull = isPlayerStandingOnHull(plr, slotFolder)
+			if onHull then
+				return plr
+			end
+		end
+	end
+	return nil
+end
+
+local function startHullIntruderMonitor()
+	task.spawn(function()
+		while running do
+			local intruder = getIntruderOnOurHull()
+			if intruder then
+				handleFarmBroken(intruder)
+				break
+			end
+			task.wait(POLL)
+		end
+	end)
 end
 
 local function debugBombState()

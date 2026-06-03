@@ -43,8 +43,20 @@ local function trimName(s)
 	return (s or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local function parseDelayNumber(value)
+	if type(value) == "number" then
+		return value
+	end
+	local text = trimName(tostring(value)):gsub(",", ".")
+	if text == "" or text == "." or text == "-" then
+		return nil
+	end
+	-- только 1 аргумент: tonumber(s, base) с base=0.05 даёт "base out of range"
+	return tonumber(text)
+end
+
 local function getReadyDelay()
-	local n = tonumber(readyDelaySeconds)
+	local n = parseDelayNumber(readyDelaySeconds)
 	if not n then
 		n = 2
 	end
@@ -892,7 +904,7 @@ local readyBox = Instance.new("TextBox")
 readyBox.Size = UDim2.new(1, -12, 0, 26)
 readyBox.Position = UDim2.new(0, 6, 0, 112)
 readyBox.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
-readyBox.Text = "2"
+readyBox.Text = "0.3"
 readyBox.PlaceholderText = "0.05 - 3"
 readyBox.Font = Enum.Font.Gotham
 readyBox.TextSize = 13
@@ -903,19 +915,32 @@ local rbc = Instance.new("UICorner")
 rbc.CornerRadius = UDim.new(0, 6)
 rbc.Parent = readyBox
 
+local updatingReadyBox = false
+
 local function syncReadyDelay()
-	local n = tonumber(trimName(readyBox.Text))
-	if n then
-		readyDelaySeconds = math.clamp(n, READY_DELAY_MIN, READY_DELAY_MAX)
-		readyBox.Text = tostring(readyDelaySeconds)
+	local n = parseDelayNumber(readyBox.Text)
+	if not n then
+		return
 	end
+	readyDelaySeconds = math.clamp(n, READY_DELAY_MIN, READY_DELAY_MAX)
+	updatingReadyBox = true
+	readyBox.Text = string.format("%.2f", readyDelaySeconds)
+	updatingReadyBox = false
 end
 
 readyBox.FocusLost:Connect(syncReadyDelay)
 readyBox:GetPropertyChangedSignal("Text"):Connect(function()
-	local n = tonumber(trimName(readyBox.Text))
-	if n then
-		readyDelaySeconds = math.clamp(n, READY_DELAY_MIN, READY_DELAY_MAX)
+	if updatingReadyBox then
+		return
+	end
+	local ok, err = pcall(function()
+		local n = parseDelayNumber(readyBox.Text)
+		if n then
+			readyDelaySeconds = math.clamp(n, READY_DELAY_MIN, READY_DELAY_MAX)
+		end
+	end)
+	if not ok then
+		warn("[ArenaFarm] readyBox:", err)
 	end
 end)
 

@@ -5,23 +5,32 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
 local ARENAS = { "Arena1", "Arena2", "Arena3", "Arena4", "Arena5", "Arena6" }
+local SIDES = { "Left", "Right" }
+local SLOT_IDS = { "1", "2", "3", "4" }
 local DIE_COUNT = 5
 local POLL = 0.35
 
 local running = false
 local showArenaNames = false
-local selectedArena = "Arena2"
 local farmerName = ""
+local farmerSpot = nil -- { arena, farmerSide, ourSide, slot }
 local arenaBillboards = {}
 local arenasChildAddedConn = nil
 local setStatus = function() end
+local getReadyHull
 
 local RegisterDied = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Replicator"):WaitForChild("RegisterDied")
 local ArenaReady = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Arena"):WaitForChild("Ready")
 
-local function log(msg)
-	warn("[ArenaFarm] " .. tostring(msg))
-	print("[ArenaFarm] " .. tostring(msg))
+local function log(...)
+	local n = select("#", ...)
+	local parts = {}
+	for i = 1, n do
+		parts[i] = tostring(select(i, ...))
+	end
+	local msg = table.concat(parts, " ")
+	warn("[ArenaFarm] " .. msg)
+	print("[ArenaFarm] " .. msg)
 end
 
 local function trimName(s)
@@ -100,15 +109,144 @@ local function fireRegisterDied()
 	end
 end
 
+local function normalizeAtName(text)
+	text = trimName(text):gsub("^@", "")
+	return string.lower(text)
+end
+
+local function getSlotUsernameText(slotFolder)
+	local statsboard = slotFolder:FindFirstChild("Statsboard")
+	if not statsboard then
+		return nil
+	end
+	local uiFront = statsboard:FindFirstChild("UI_Front")
+	local main = uiFront and uiFront:FindFirstChild("Main")
+	local holder = main and main:FindFirstChild("StatsHolder")
+	local pinfo = holder and holder:FindFirstChild("PlayerInfo")
+	local names = pinfo and pinfo:FindFirstChild("Names")
+	local username = names and names:FindFirstChild("Username")
+	if username and (username:IsA("TextLabel") or username:IsA("TextButton")) then
+		local t = trimName(username.Text)
+		if t ~= "" then
+			return t
+		end
+	end
+	return nil
+end
+
+local function labelMatchesFarmer(labelText, farmer)
+	if not labelText or not farmer then
+		return false
+	end
+	local norm = normalizeAtName(labelText)
+	if norm == "" then
+		return false
+	end
+	local targets = {
+		string.lower(farmer.Name),
+		string.lower(farmer.DisplayName),
+		string.lower(trimName(farmerName)),
+	}
+	for _, t in ipairs(targets) do
+		if t ~= "" and norm == t then
+			return true
+		end
+	end
+	return false
+end
+
+local function oppositeSide(side)
+	if side == "Left" then
+		return "Right"
+	end
+	return "Left"
+end
+
+local function scanFarmerSpot()
+	local farmer = getFarmer()
+	if not farmer then
+		return nil
+	end
+	local arenasFolder = workspace:FindFirstChild("Arenas")
+	if not arenasFolder then
+		return nil
+	end
+
+	for _, arenaName in ipairs(ARENAS) do
+		local arena = arenasFolder:FindFirstChild(arenaName)
+		local slots = arena and arena:FindFirstChild("Slots")
+		if slots then
+			for _, sideName in ipairs(SIDES) do
+				local sideFolder = slots:FindFirstChild(sideName)
+				if sideFolder then
+					for _, slotId in ipairs(SLOT_IDS) do
+						local slot = sideFolder:FindFirstChild(slotId)
+						if slot then
+							local userText = getSlotUsernameText(slot)
+							if userText and labelMatchesFarmer(userText, farmer) then
+								return {
+									arena = arenaName,
+									farmerSide = sideName,
+									ourSide = oppositeSide(sideName),
+									slot = slotId,
+									labelText = userText,
+								}
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	return nil
+end
+
+local function refreshFarmerSpot()
+	farmerSpot = scanFarmerSpot()
+	return farmerSpot
+end
+
+getReadyHull = function()
+	if not farmerSpot then
+		refreshFarmerSpot()
+	end
+	if not farmerSpot then
+		return nil
+	end
+	local arenas = workspace:FindFirstChild("Arenas")
+	local arena = arenas and arenas:FindFirstChild(farmerSpot.arena)
+	local slots = arena and arena:FindFirstChild("Slots")
+	local side = slots and slots:FindFirstChild(farmerSpot.ourSide)
+	local slot = side and side:FindFirstChild("1")
+	local hull = slot and slot:FindFirstChild("Hull")
+	if hull and hull:IsA("BasePart") then
+		return hull
+	end
+	return nil
+end
+
 local function debugBombState()
 	local farmer = getFarmer()
 	local has, who = anyoneHasBomb()
 	log("--- диагностика ---")
-	log("Арена:", selectedArena, "| Автофарм:", running and "ВКЛ" or "ВЫКЛ")
-	log("Фармер:", farmer and farmer.Name or "НЕ НАЙДЕН", "| введено:", farmerName)
+	log("Автофарм:", running and "ВКЛ" or "ВЫКЛ")
+	log("Фармер:", farmer and farmer.Name or "НЕ НАЙДЕН", "| ввод:", farmerName)
+	if farmerSpot then
+		log(
+			"Слот фармера:",
+			farmerSpot.arena,
+			farmerSpot.farmerSide,
+			farmerSpot.slot,
+			"| Ready:",
+			farmerSpot.ourSide,
+			"1"
+		)
+	else
+		log("На аренах не найден (Statsboard Username)")
+	end
 	log("Бомба у тебя:", playerHasBomb(LocalPlayer) and "ДА" or "нет")
 	log("Бомба у фармера:", farmer and (playerHasBomb(farmer) and "ДА" or "нет") or "—")
-	log("Итог:", has and ("бомба " .. who) or "бомбы нет — скрипт ЖДЁТ")
+	log("Итог:", has and ("бомба " .. who) or "бомбы нет — ЖДЁМ")
 	log("Hull:", getReadyHull() and "найден" or "НЕТ")
 end
 
@@ -151,7 +289,12 @@ local function waitForBomb()
 		end
 		if tick() - heartbeat >= 4 then
 			heartbeat = tick()
-			setStatus("Жду бомбу... " .. trimName(farmerName))
+			refreshFarmerSpot()
+			if farmerSpot then
+				setStatus("Жду бомбу | " .. farmerSpot.arena .. " " .. farmerSpot.farmerSide)
+			else
+				setStatus("Жду бомбу | фармер не на арене")
+			end
 			debugBombState()
 		end
 		task.wait(POLL)
@@ -159,26 +302,8 @@ local function waitForBomb()
 	return false
 end
 
-local function getReadyHull()
-	local arenas = workspace:FindFirstChild("Arenas")
-	if not arenas then
-		return nil
-	end
-	local arena = arenas:FindFirstChild(selectedArena)
-	if not arena then
-		return nil
-	end
-	local slots = arena:FindFirstChild("Slots")
-	local left = slots and slots:FindFirstChild("Left")
-	local slot1 = left and left:FindFirstChild("1")
-	local hull = slot1 and slot1:FindFirstChild("Hull")
-	if hull and hull:IsA("BasePart") then
-		return hull
-	end
-	return nil
-end
-
 local function touchReadyButton()
+	refreshFarmerSpot()
 	if not firetouchinterest then
 		log("Нет firetouchinterest")
 		return false
@@ -195,9 +320,14 @@ local function touchReadyButton()
 
 	local hull = getReadyHull()
 	if not hull then
-		log("Hull не найден для " .. selectedArena)
+		if farmerSpot then
+			log("Hull не найден:", farmerSpot.arena, farmerSpot.ourSide, "1")
+		else
+			log("Фармер не найден на Statsboard — Ready невозможен")
+		end
 		return false
 	end
+	log("Ready Hull:", hull:GetFullName())
 
 	hrp.CFrame = hull.CFrame + Vector3.new(0, 3, 0)
 	task.wait(0.15)
@@ -249,6 +379,14 @@ end
 
 local function farmLoop()
 	log("Цикл автофарма запущен")
+	local spot = refreshFarmerSpot()
+	if not spot then
+		setStatus("Фармер не на арене (Statsboard)")
+		log("Фармер не найден ни на одной из 6 арен")
+	else
+		setStatus(spot.arena .. " " .. spot.farmerSide .. " → Ready " .. spot.ourSide)
+		log("Найден:", spot.labelText, "|", spot.arena, spot.farmerSide, spot.slot)
+	end
 	debugBombState()
 
 	while running do
@@ -262,8 +400,12 @@ local function farmLoop()
 			break
 		end
 
-		setStatus("Ready: " .. selectedArena)
-		log("Ready: " .. selectedArena)
+		refreshFarmerSpot()
+		local readyLabel = farmerSpot
+			and (farmerSpot.arena .. " Ready " .. farmerSpot.ourSide .. ".1")
+			or "?"
+		setStatus("Ready: " .. readyLabel)
+		log("Ready:", readyLabel)
 		local readyOk = touchReadyButton()
 		if not readyOk then
 			setStatus("Ошибка Ready / Hull")
@@ -392,8 +534,8 @@ sg.Parent = guiParent
 
 local main = Instance.new("Frame")
 main.Name = "Main"
-main.Size = UDim2.new(0, 220, 0, 336)
-main.Position = UDim2.new(0, 12, 0.5, -168)
+main.Size = UDim2.new(0, 220, 0, 218)
+main.Position = UDim2.new(0, 12, 0.5, -109)
 main.BackgroundColor3 = Color3.fromRGB(28, 28, 32)
 main.BorderSizePixel = 0
 main.Parent = sg
@@ -413,60 +555,9 @@ title.TextColor3 = Color3.fromRGB(240, 240, 245)
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = main
 
-local arenaLabel = Instance.new("TextLabel")
-arenaLabel.Size = UDim2.new(1, -12, 0, 18)
-arenaLabel.Position = UDim2.new(0, 6, 0, 36)
-arenaLabel.BackgroundTransparency = 1
-arenaLabel.Text = "Арена (одна):"
-arenaLabel.Font = Enum.Font.Gotham
-arenaLabel.TextSize = 12
-arenaLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
-arenaLabel.TextXAlignment = Enum.TextXAlignment.Left
-arenaLabel.Parent = main
-
-local arenaBtns = {}
-local arenaContainer = Instance.new("Frame")
-arenaContainer.Size = UDim2.new(1, -12, 0, 108)
-arenaContainer.Position = UDim2.new(0, 6, 0, 56)
-arenaContainer.BackgroundTransparency = 1
-arenaContainer.Parent = main
-
-local grid = Instance.new("UIGridLayout")
-grid.CellSize = UDim2.new(0.48, 0, 0, 30)
-grid.CellPadding = UDim2.new(0.04, 0, 0, 6)
-grid.Parent = arenaContainer
-
-local function styleArenaBtn(btn, active)
-	btn.BackgroundColor3 = active and Color3.fromRGB(70, 120, 200) or Color3.fromRGB(45, 45, 52)
-	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-end
-
-for _, arenaName in ipairs(ARENAS) do
-	local btn = Instance.new("TextButton")
-	btn.Name = arenaName
-	btn.Text = arenaName
-	btn.Font = Enum.Font.GothamSemibold
-	btn.TextSize = 12
-	btn.AutoButtonColor = false
-	btn.BorderSizePixel = 0
-	styleArenaBtn(btn, arenaName == selectedArena)
-	local bc = Instance.new("UICorner")
-	bc.CornerRadius = UDim.new(0, 6)
-	bc.Parent = btn
-	btn.Parent = arenaContainer
-	arenaBtns[arenaName] = btn
-
-	btn.MouseButton1Click:Connect(function()
-		selectedArena = arenaName
-		for n, b in pairs(arenaBtns) do
-			styleArenaBtn(b, n == arenaName)
-		end
-	end)
-end
-
 local farmLabel = Instance.new("TextLabel")
 farmLabel.Size = UDim2.new(1, -12, 0, 18)
-farmLabel.Position = UDim2.new(0, 6, 0, 168)
+farmLabel.Position = UDim2.new(0, 6, 0, 36)
 farmLabel.BackgroundTransparency = 1
 farmLabel.Text = "Имя фармящего:"
 farmLabel.Font = Enum.Font.Gotham
@@ -477,7 +568,7 @@ farmLabel.Parent = main
 
 local nameBox = Instance.new("TextBox")
 nameBox.Size = UDim2.new(1, -12, 0, 30)
-nameBox.Position = UDim2.new(0, 6, 0, 188)
+nameBox.Position = UDim2.new(0, 6, 0, 56)
 nameBox.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
 nameBox.Text = ""
 nameBox.PlaceholderText = "ник в Players"
@@ -499,7 +590,7 @@ nameBox.FocusLost:Connect(syncFarmerName)
 
 local namesToggleBtn = Instance.new("TextButton")
 namesToggleBtn.Size = UDim2.new(1, -12, 0, 32)
-namesToggleBtn.Position = UDim2.new(0, 6, 0, 224)
+namesToggleBtn.Position = UDim2.new(0, 6, 0, 94)
 namesToggleBtn.Text = "Имена арен: ВЫКЛ"
 namesToggleBtn.Font = Enum.Font.GothamSemibold
 namesToggleBtn.TextSize = 13
@@ -527,7 +618,7 @@ end)
 
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(1, -12, 0, 36)
-toggleBtn.Position = UDim2.new(0, 6, 0, 262)
+toggleBtn.Position = UDim2.new(0, 6, 0, 132)
 toggleBtn.Text = "Автофарм: ВЫКЛ"
 toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.TextSize = 14
@@ -542,7 +633,7 @@ tbc.Parent = toggleBtn
 
 local status = Instance.new("TextLabel")
 status.Size = UDim2.new(1, -12, 0, 36)
-status.Position = UDim2.new(0, 6, 0, 300)
+status.Position = UDim2.new(0, 6, 0, 174)
 status.BackgroundColor3 = Color3.fromRGB(38, 38, 46)
 status.BackgroundTransparency = 0.2
 status.BorderSizePixel = 0
@@ -585,14 +676,21 @@ toggleBtn.MouseButton1Click:Connect(function()
 			running = false
 			return
 		end
+		local spot = refreshFarmerSpot()
+		if not spot then
+			setStatus("Фармер не на арене — зайди в слот")
+			log("Нет на Statsboard. Проверь ник и @ в Username")
+			running = false
+			return
+		end
 		if not getReadyHull() then
-			setStatus("Нет Hull для " .. selectedArena)
+			setStatus("Нет Hull " .. spot.ourSide .. ".1")
 			running = false
 			return
 		end
 		toggleBtn.Text = "Автофарм: ВКЛ"
 		toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 140, 80)
-		setStatus("Старт. Жду бомбу...")
+		setStatus(spot.arena .. " → Ready " .. spot.ourSide .. ".1")
 		task.spawn(farmLoop)
 	else
 		toggleBtn.Text = "Автофарм: ВЫКЛ"
@@ -601,4 +699,4 @@ toggleBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
-log("GUI готова. Арена по умолчанию: " .. selectedArena)
+log("GUI готова. Арена определяется по фармеру на Statsboard.")

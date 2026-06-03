@@ -109,7 +109,32 @@ local function fireRegisterDied()
 	end
 end
 
-local function normalizeAtName(text)
+local function guiText(obj)
+	if not obj then
+		return nil
+	end
+	if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+		local t = trimName(obj.Text)
+		if t ~= "" then
+			return t
+		end
+	end
+	return nil
+end
+
+-- Формат в игре: (@ник) — скобки и @ обязательны в UI
+local function extractNickFromLabel(text)
+	text = trimName(text)
+	if text == "" then
+		return ""
+	end
+
+	local fromParens = text:match("%(@([^%)]+)%)")
+	if fromParens then
+		return string.lower(trimName(fromParens))
+	end
+
+	text = text:gsub("%(", ""):gsub("%)", "")
 	text = trimName(text):gsub("^@", "")
 	return string.lower(text)
 end
@@ -119,40 +144,117 @@ local function getSlotUsernameText(slotFolder)
 	if not statsboard then
 		return nil
 	end
+
 	local uiFront = statsboard:FindFirstChild("UI_Front")
 	local main = uiFront and uiFront:FindFirstChild("Main")
 	local holder = main and main:FindFirstChild("StatsHolder")
 	local pinfo = holder and holder:FindFirstChild("PlayerInfo")
 	local names = pinfo and pinfo:FindFirstChild("Names")
 	local username = names and names:FindFirstChild("Username")
-	if username and (username:IsA("TextLabel") or username:IsA("TextButton")) then
-		local t = trimName(username.Text)
-		if t ~= "" then
-			return t
+
+	local t = guiText(username)
+	if t then
+		return t
+	end
+
+	if names then
+		for _, d in ipairs(names:GetDescendants()) do
+			local dt = guiText(d)
+			if dt and (string.find(dt, "@", 1, true) or string.find(dt, "(", 1, true)) then
+				return dt
+			end
 		end
 	end
+
+	for _, d in ipairs(statsboard:GetDescendants()) do
+		if d.Name == "Username" then
+			local dt = guiText(d)
+			if dt then
+				return dt
+			end
+		end
+	end
+
 	return nil
+end
+
+local function getFarmerSearchNames(farmer)
+	local list = {}
+	local function add(s)
+		s = string.lower(trimName(s))
+		if s ~= "" then
+			for _, existing in ipairs(list) do
+				if existing == s then
+					return
+				end
+			end
+			table.insert(list, s)
+		end
+	end
+	if farmer then
+		add(farmer.Name)
+		add(farmer.DisplayName)
+	end
+	add(farmerName)
+	return list
 end
 
 local function labelMatchesFarmer(labelText, farmer)
 	if not labelText or not farmer then
 		return false
 	end
-	local norm = normalizeAtName(labelText)
-	if norm == "" then
+
+	local norm = extractNickFromLabel(labelText)
+	if norm == "" or norm == "..." or norm == "…" then
 		return false
 	end
-	local targets = {
-		string.lower(farmer.Name),
-		string.lower(farmer.DisplayName),
-		string.lower(trimName(farmerName)),
-	}
-	for _, t in ipairs(targets) do
-		if t ~= "" and norm == t then
+
+	for _, target in ipairs(getFarmerSearchNames(farmer)) do
+		if norm == target then
 			return true
 		end
 	end
+
+	local rawLower = string.lower(labelText)
+	for _, target in ipairs(getFarmerSearchNames(farmer)) do
+		if string.find(rawLower, target, 1, true) then
+			return true
+		end
+	end
+
 	return false
+end
+
+local function debugScanUsernames()
+	log("--- все Username на аренах ---")
+	local arenasFolder = workspace:FindFirstChild("Arenas")
+	if not arenasFolder then
+		return
+	end
+	for _, arenaName in ipairs(ARENAS) do
+		local arena = arenasFolder:FindFirstChild(arenaName)
+		local slots = arena and arena:FindFirstChild("Slots")
+		if slots then
+			for _, sideName in ipairs(SIDES) do
+				local sideFolder = slots:FindFirstChild(sideName)
+				if sideFolder then
+					for _, slotId in ipairs(SLOT_IDS) do
+						local slot = sideFolder:FindFirstChild(slotId)
+						if slot then
+							local userText = getSlotUsernameText(slot)
+							if userText and userText ~= "" then
+								log(arenaName, sideName, slotId, "raw:", userText, "nick:", extractNickFromLabel(userText))
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	local farmer = getFarmer()
+	if farmer then
+		log("Ищем:", table.concat(getFarmerSearchNames(farmer), ", "))
+	end
 end
 
 local function oppositeSide(side)
@@ -679,7 +781,8 @@ toggleBtn.MouseButton1Click:Connect(function()
 		local spot = refreshFarmerSpot()
 		if not spot then
 			setStatus("Фармер не на арене — зайди в слот")
-			log("Нет на Statsboard. Проверь ник и @ в Username")
+			log("Нет на Statsboard. Формат в игре: (@ник)")
+			debugScanUsernames()
 			running = false
 			return
 		end

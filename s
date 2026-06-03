@@ -483,7 +483,9 @@ local function touchReadyButton()
 		return false
 	end
 
-	log("Hull touch OK, Ready FireServer")
+	log("Hull touch OK, жду 2 сек перед Ready...")
+	setStatus("Жду 2 сек → Ready...")
+	task.wait(2)
 	local ok, err = pcall(function()
 		ArenaReady:FireServer(true)
 	end)

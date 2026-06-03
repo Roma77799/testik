@@ -9,8 +9,11 @@ local DIE_COUNT = 5
 local POLL = 0.35
 
 local running = false
+local showArenaNames = false
 local selectedArena = "Arena2"
 local farmerName = ""
+local arenaBillboards = {}
+local arenasChildAddedConn = nil
 
 local RegisterDied = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Replicator"):WaitForChild("RegisterDied")
 local ArenaReady = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Arena"):WaitForChild("Ready")
@@ -192,12 +195,115 @@ local function farmLoop()
 	log("Автофарм выключен")
 end
 
+local function getArenaAnchor(arenaModel)
+	if arenaModel:IsA("BasePart") then
+		return arenaModel
+	end
+	if arenaModel.PrimaryPart then
+		return arenaModel.PrimaryPart
+	end
+	for _, d in ipairs(arenaModel:GetDescendants()) do
+		if d:IsA("BasePart") then
+			return d
+		end
+	end
+	return nil
+end
+
+local function destroyArenaBillboards()
+	for _, gui in ipairs(arenaBillboards) do
+		if gui and gui.Parent then
+			gui:Destroy()
+		end
+	end
+	table.clear(arenaBillboards)
+	if arenasChildAddedConn then
+		arenasChildAddedConn:Disconnect()
+		arenasChildAddedConn = nil
+	end
+end
+
+local function createArenaBillboard(arenaModel)
+	local anchor = getArenaAnchor(arenaModel)
+	if not anchor then
+		return
+	end
+	for _, gui in ipairs(arenaBillboards) do
+		if gui.Adornee == anchor and gui:GetAttribute("ArenaName") == arenaModel.Name then
+			return
+		end
+	end
+
+	local bb = Instance.new("BillboardGui")
+	bb.Name = "ArenaFarm_NameTag"
+	bb.Adornee = anchor
+	bb.AlwaysOnTop = true
+	bb.LightInfluence = 0
+	bb.MaxDistance = 500
+	bb.Size = UDim2.new(0, 140, 0, 44)
+	bb.StudsOffset = Vector3.new(0, 14, 0)
+	bb:SetAttribute("ArenaName", arenaModel.Name)
+	bb.Parent = anchor
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+	label.BackgroundTransparency = 0.25
+	label.BorderSizePixel = 0
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 18
+	label.TextColor3 = Color3.fromRGB(255, 220, 100)
+	label.TextStrokeTransparency = 0.5
+	label.Text = arenaModel.Name
+	label.Parent = bb
+
+	local lc = Instance.new("UICorner")
+	lc.CornerRadius = UDim.new(0, 6)
+	lc.Parent = label
+
+	table.insert(arenaBillboards, bb)
+end
+
+local function refreshArenaBillboards()
+	local arenasFolder = workspace:FindFirstChild("Arenas")
+	if not arenasFolder then
+		log("Нет Workspace.Arenas")
+		return
+	end
+	for _, child in ipairs(arenasFolder:GetChildren()) do
+		createArenaBillboard(child)
+	end
+end
+
+local function setArenaNamesVisible(on)
+	showArenaNames = on
+	if not on then
+		destroyArenaBillboards()
+		return
+	end
+	destroyArenaBillboards()
+	refreshArenaBillboards()
+	local arenasFolder = workspace:WaitForChild("Arenas", 10)
+	if not arenasFolder then
+		return
+	end
+	arenasChildAddedConn = arenasFolder.ChildAdded:Connect(function(child)
+		if showArenaNames then
+			task.defer(function()
+				createArenaBillboard(child)
+			end)
+		end
+	end)
+	log("Имена арен: ВКЛ (" .. #arenaBillboards .. " подписей)")
+end
+
 -- GUI
 local guiParent = (gethui and gethui()) or game:GetService("CoreGui")
 local old = guiParent:FindFirstChild("ArenaAutofarmGui")
 if old then
 	old:Destroy()
 end
+destroyArenaBillboards()
 
 local sg = Instance.new("ScreenGui")
 sg.Name = "ArenaAutofarmGui"
@@ -207,8 +313,8 @@ sg.Parent = guiParent
 
 local main = Instance.new("Frame")
 main.Name = "Main"
-main.Size = UDim2.new(0, 220, 0, 268)
-main.Position = UDim2.new(0, 12, 0.5, -134)
+main.Size = UDim2.new(0, 220, 0, 312)
+main.Position = UDim2.new(0, 12, 0.5, -156)
 main.BackgroundColor3 = Color3.fromRGB(28, 28, 32)
 main.BorderSizePixel = 0
 main.Parent = sg
@@ -309,9 +415,37 @@ nameBox.FocusLost:Connect(function()
 	farmerName = nameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
 end)
 
+local namesToggleBtn = Instance.new("TextButton")
+namesToggleBtn.Size = UDim2.new(1, -12, 0, 32)
+namesToggleBtn.Position = UDim2.new(0, 6, 0, 224)
+namesToggleBtn.Text = "Имена арен: ВЫКЛ"
+namesToggleBtn.Font = Enum.Font.GothamSemibold
+namesToggleBtn.TextSize = 13
+namesToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+namesToggleBtn.BackgroundColor3 = Color3.fromRGB(90, 70, 120)
+namesToggleBtn.AutoButtonColor = false
+namesToggleBtn.BorderSizePixel = 0
+namesToggleBtn.Parent = main
+local ntbc = Instance.new("UICorner")
+ntbc.CornerRadius = UDim.new(0, 6)
+ntbc.Parent = namesToggleBtn
+
+namesToggleBtn.MouseButton1Click:Connect(function()
+	showArenaNames = not showArenaNames
+	if showArenaNames then
+		setArenaNamesVisible(true)
+		namesToggleBtn.Text = "Имена арен: ВКЛ"
+		namesToggleBtn.BackgroundColor3 = Color3.fromRGB(120, 90, 160)
+	else
+		setArenaNamesVisible(false)
+		namesToggleBtn.Text = "Имена арен: ВЫКЛ"
+		namesToggleBtn.BackgroundColor3 = Color3.fromRGB(90, 70, 120)
+	end
+end)
+
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(1, -12, 0, 36)
-toggleBtn.Position = UDim2.new(0, 6, 0, 224)
+toggleBtn.Position = UDim2.new(0, 6, 0, 262)
 toggleBtn.Text = "Автофарм: ВЫКЛ"
 toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.TextSize = 14

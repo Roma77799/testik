@@ -114,19 +114,6 @@ local function namesMatch(a, b)
 	if sa == "" or sb == "" then return false end
 	return sa:lower() == sb:lower()
 end
-game:GetService("ReplicatedStorage").Trade.UpdateTrade.OnClientEvent:Connect(function(args)
-    local prev = lastOfferTime
-    if type(args) == "table" and args.LastOffer then
-        lastOfferTime = args.LastOffer
-        botLog("remote", string.format(
-            "UpdateTrade lastOffer %s->%s",
-            tostring(prev or 0),
-            tostring(args.LastOffer)
-        ))
-    else
-        botLog("remote", "UpdateTrade payload=" .. tostring(args))
-    end
-end)
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
@@ -167,27 +154,6 @@ local function isBotTradeEcho(kind)
 		return true
 	end
 	return false
-end
-
-local function botFireTrade(kind, remote, ...)
-	markBotTradeAction(kind)
-	botLog("action", string.format("%s fire status=%s", tostring(kind), tostring(lastLoggedTradeStatus or "?")))
-	local args = { ... }
-	return remote:FireServer(table.unpack(args))
-end
-
-local function botLogSnapshot(tag)
-	local st = "?"
-	pcall(function()
-		st = Trade.GetTradeStatus:InvokeServer()
-	end)
-	botLog("snap", string.format(
-		"%s status=%s lastOffer=%s target=%s",
-		tostring(tag),
-		tostring(st),
-		tostring(lastOfferTime or 0),
-		tostring(targetName or "?")
-	))
 end
 
 local function tradeLogBatchArray(batch)
@@ -425,6 +391,41 @@ end
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Trade = ReplicatedStorage:WaitForChild("Trade")
+
+local function botFireTrade(kind, remote, ...)
+	markBotTradeAction(kind)
+	botLog("action", string.format("%s fire status=%s", tostring(kind), tostring(lastLoggedTradeStatus or "?")))
+	local args = { ... }
+	return remote:FireServer(table.unpack(args))
+end
+
+local function botLogSnapshot(tag)
+	local st = "?"
+	pcall(function()
+		st = Trade.GetTradeStatus:InvokeServer()
+	end)
+	botLog("snap", string.format(
+		"%s status=%s lastOffer=%s target=%s",
+		tostring(tag),
+		tostring(st),
+		tostring(lastOfferTime or 0),
+		tostring(targetName or "?")
+	))
+end
+
+Trade.UpdateTrade.OnClientEvent:Connect(function(args)
+	local prev = lastOfferTime
+	if type(args) == "table" and args.LastOffer then
+		lastOfferTime = args.LastOffer
+		botLog("remote", string.format(
+			"UpdateTrade lastOffer %s->%s",
+			tostring(prev or 0),
+			tostring(args.LastOffer)
+		))
+	else
+		botLog("remote", "UpdateTrade payload=" .. tostring(args))
+	end
+end)
 
 task.spawn(function()
     local startTime = os.time()
@@ -874,8 +875,6 @@ task.spawn(function()
         end]]
     end
 end)
-
-local Trade = ReplicatedStorage:WaitForChild("Trade", 100)
 
 local function connectHandlers()
     Trade.SendRequest.OnClientInvoke = function(arg1)

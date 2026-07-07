@@ -1,0 +1,1497 @@
+--[[
+	Instance Exporter — один скрипт, автозапуск в игре.
+	Скопируй целиком в executor и выполни — дамп пойдёт в workspace/export/
+
+	Требует: writefile, makefolder (sUNC Filesystem)
+	Опционально: getproperties, gethiddenproperty, getnilinstances, decompile, getscriptbytecode
+]]
+
+local HttpService = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+
+local gameRoot = workspace.Parent
+
+-- ---------------------------------------------------------------------------
+-- Exporter (объявляем до функций, которые читают Exporter.Config)
+-- ---------------------------------------------------------------------------
+
+local Exporter = {}
+
+Exporter.Config = {
+	rootFolder = "export",
+	gameOnly = true,
+	exportRoots = {
+		"Workspace",
+		"ReplicatedStorage",
+		"ReplicatedFirst",
+		"StarterGui",
+		"StarterPack",
+		"StarterPlayer",
+		"Lighting",
+		"ServerScriptService",  -- NEW
+		"ServerStorage",        -- NEW
+		"SoundService",      -- по желанию
+	},
+	includeLocalPlayer = true,
+	includeNilInstances = false,
+	includeCorePackages = false,
+	skipEngineClasses = true,
+	skipOrphanInstances = true,
+	exportByClass = false,
+	exportMode = "logic",
+	propertiesMode = "fast",
+	decompileScripts = true,
+	saveBytecode = false,
+	includeChildren = false,
+	includeTags = false,
+	includeAttributes = true,
+	saveManifestList = false,
+	saveInstanceIndex = true,
+	indexBatchSize = 5000,
+	yieldEvery = 0,
+	manifestSaveEvery = 2000,
+	skipDataModel = true,
+	shortExportFolder = true,
+	maxPathLength = 200,
+	warnEveryFailed = 100,
+	statusCallback = function(msg)
+		print("[Exporter]", msg)
+	end,
+}
+
+Exporter._exportRoots = nil
+
+function Exporter.setStatus(msg)
+	if Exporter.Config.statusCallback then
+		Exporter.Config.statusCallback(msg)
+	end
+end
+
+-- ---------------------------------------------------------------------------
+-- Filesystem helpers
+-- ---------------------------------------------------------------------------
+
+local function requireFs(name)
+	local fn = getfenv()[name]
+	if type(fn) ~= "function" then
+		error(("Exporter requires %s (sUNC Filesystem). See https://docs.sunc.su/Filesystem/"):format(name), 0)
+	end
+	return fn
+end
+
+local writefile = requireFs("writefile")
+local makefolder = requireFs("makefolder")
+local readfile = getfenv().readfile
+local appendfile = getfenv().appendfile
+local isfolder = getfenv().isfolder
+local isfile = getfenv().isfile
+
+local function pathJoin(...)
+	local parts = {...}
+	local path = table.concat(parts, "/")
+	return path:gsub("/+", "/"):gsub("^/", ""):gsub("/$", "")
+end
+
+local WINDOWS_RESERVED = {
+	CON = true, PRN = true, AUX = true, NUL = true,
+	COM1 = true, COM2 = true, COM3 = true, COM4 = true,
+	LPT1 = true, LPT2 = true, LPT3 = true,
+}
+
+local function hashPath(str)
+	local h = 0
+	for i = 1, #str do
+		h = (h * 31 + string.byte(str, i)) % 2147483647
+	end
+	return string.format("%07x", h)
+end
+
+local function sanitizeSegment(name)
+	local s = tostring(name)
+	s = s:gsub("[%c]", "_")
+	s = s:gsub("[*\\?:<>|\"/]", "_")
+	s = s:gsub("^[%s%.]+", ""):gsub("[%s%.]+$", "")
+	if s == "" then
+		s = "_empty"
+	end
+	local head = s:upper():match("^([^%.]+)")
+	if head and WINDOWS_RESERVED[head] then
+		s = "_" .. s
+	end
+	return s:gsub("%.", "_"):sub(1, 80)
+end
+
+local function fullNameToRelativePath(fullName)
+	local segments = string.split(fullName, ".")
+	for i = 1, #segments do
+		segments[i] = sanitizeSegment(segments[i])
+	end
+	return table.concat(segments, "/")
+end
+
+local folderCache = {}
+
+local function ensureFolder(path)
+	if not path or path == "" then
+		return true
+	end
+	if folderCache[path] then
+		return true
+	end
+	if isfolder and isfolder(path) then
+		folderCache[path] = true
+		return true
+	end
+	local built = ""
+	for segment in string.gmatch(path, "[^/]+") do
+		built = (built == "") and segment or (built .. "/" .. segment)
+		if not folderCache[built] and not (isfolder and isfolder(built)) then
+			local ok, err = pcall(makefolder, built)
+			if not ok then
+				return false, err or ("could not create directory: " .. built)
+			end
+		end
+		folderCache[built] = true
+	end
+	return true
+end
+
+local function writeFileSafe(path, contents)
+	local dir = path:match("^(.*)/[^/]+$") or ""
+	local okDir, dirErr = ensureFolder(dir)
+	if not okDir then
+		return false, dirErr
+	end
+	local ok, err = pcall(writefile, path, contents)
+	if not ok then
+		return false, err or ("could not write file: " .. path)
+	end
+	return true
+end
+
+local function writeJson(path, data)
+	local ok, encoded = pcall(HttpService.JSONEncode, HttpService, data)
+	if not ok then
+		encoded = HttpService:JSONEncode({
+			_error = "JSONEncode failed",
+			_message = tostring(encoded),
+		})
+	end
+	return writeFileSafe(path, encoded)
+end
+
+local function capRelativePath(relativePath, exportRoot, index, className)
+	local maxLen = Exporter.Config.maxPathLength or 200
+	local treePath = pathJoin(exportRoot, "tree", relativePath .. ".json")
+	if #treePath <= maxLen then
+		return relativePath, nil
+	end
+	local hash = hashPath(relativePath)
+	local short = pathJoin("_long", ("%05d_%s_%s"):format(index, sanitizeSegment(className), hash))
+	return short, relativePath
+end
+
+-- ---------------------------------------------------------------------------
+-- Value serialization (lossless / typed)
+-- ---------------------------------------------------------------------------
+
+local function base64Encode(raw)
+	if type(raw) ~= "string" then
+		return nil
+	end
+	if crypt and crypt.base64 and crypt.base64.encode then
+		local ok, out = pcall(crypt.base64.encode, raw)
+		if ok then return out end
+	end
+	return nil
+end
+
+local function serializeValue(value, depth)
+	depth = depth or 0
+	if depth > 12 then
+		return { __type = "MaxDepth" }
+	end
+
+	local t = typeof(value)
+
+	if value == nil then
+		return nil
+	end
+
+	if t == "boolean" or t == "number" then
+		if t == "number" and (value ~= value or value == math.huge or value == -math.huge) then
+			return { __type = "number", value = tostring(value) }
+		end
+		return value
+	end
+
+	if t == "string" then
+		return value
+	end
+
+	if t == "EnumItem" then
+		return {
+			__type = "EnumItem",
+			enumType = tostring(value.EnumType),
+			name = value.Name,
+			value = value.Value,
+		}
+	end
+
+	if t == "Instance" then
+		local fullName = ""
+		pcall(function()
+			fullName = value:GetFullName()
+		end)
+		return {
+			__type = "Instance",
+			className = value.ClassName,
+			name = value.Name,
+			fullName = fullName,
+		}
+	end
+
+	if t == "Vector2" then
+		return { __type = "Vector2", x = value.X, y = value.Y }
+	end
+
+	if t == "Vector3" then
+		return { __type = "Vector3", x = value.X, y = value.Y, z = value.Z }
+	end
+
+	if t == "CFrame" then
+		local components = { value:GetComponents() }
+		return { __type = "CFrame", components = components }
+	end
+
+	if t == "Color3" then
+		local r, g, b = value.R, value.G, value.B
+		if r > 1 or g > 1 or b > 1 then
+			if r <= 255 and g <= 255 and b <= 255 then
+				r, g, b = r / 255, g / 255, b / 255
+			else
+				return { __type = "Color3", _invalid = true, raw = { r = r, g = g, b = b } }
+			end
+		end
+		return { __type = "Color3", r = r, g = g, b = b }
+	end
+
+	if t == "BrickColor" then
+		return { __type = "BrickColor", name = value.Name, number = value.Number }
+	end
+
+	if t == "UDim" then
+		return { __type = "UDim", scale = value.Scale, offset = value.Offset }
+	end
+
+	if t == "UDim2" then
+		return {
+			__type = "UDim2",
+			xScale = value.X.Scale, xOffset = value.X.Offset,
+			yScale = value.Y.Scale, yOffset = value.Y.Offset,
+		}
+	end
+
+	if t == "Rect" then
+		return {
+			__type = "Rect",
+			min = serializeValue(value.Min, depth + 1),
+			max = serializeValue(value.Max, depth + 1),
+		}
+	end
+
+	if t == "Ray" then
+		return {
+			__type = "Ray",
+			origin = serializeValue(value.Origin, depth + 1),
+			direction = serializeValue(value.Direction, depth + 1),
+		}
+	end
+
+	if t == "NumberRange" then
+		return { __type = "NumberRange", min = value.Min, max = value.Max }
+	end
+
+	if t == "PhysicalProperties" then
+		return {
+			__type = "PhysicalProperties",
+			density = value.Density,
+			friction = value.Friction,
+			elasticity = value.Elasticity,
+			frictionWeight = value.FrictionWeight,
+			elasticityWeight = value.ElasticityWeight,
+		}
+	end
+
+	if t == "Faces" then
+		return {
+			__type = "Faces",
+			back = value.Back, bottom = value.Bottom, front = value.Front,
+			left = value.Left, right = value.Right, top = value.Top,
+		}
+	end
+
+	if t == "Axes" then
+		return { __type = "Axes", x = value.X, y = value.Y, z = value.Z }
+	end
+
+	if t == "Region3" then
+		local cf, size = value.CFrame, value.Size
+		return {
+			__type = "Region3",
+			cframe = serializeValue(cf, depth + 1),
+			size = serializeValue(size, depth + 1),
+		}
+	end
+
+	if t == "RectOffset" then
+		return {
+			__type = "RectOffset",
+			top = value.Top, bottom = value.Bottom,
+			left = value.Left, right = value.Right,
+		}
+	end
+
+	if t == "Font" then
+		return {
+			__type = "Font",
+			family = value.Family,
+			weight = serializeValue(value.Weight, depth + 1),
+			style = serializeValue(value.Style, depth + 1),
+		}
+	end
+
+	if t == "ColorSequence" then
+		local keypoints = {}
+		for _, kp in ipairs(value.Keypoints) do
+			keypoints[#keypoints + 1] = {
+				time = kp.Time,
+				color = serializeValue(kp.Value, depth + 1),
+			}
+		end
+		return { __type = "ColorSequence", keypoints = keypoints }
+	end
+
+	if t == "NumberSequence" then
+		local keypoints = {}
+		for _, kp in ipairs(value.Keypoints) do
+			keypoints[#keypoints + 1] = {
+				time = kp.Time,
+				value = kp.Value,
+				envelope = kp.Envelope,
+			}
+		end
+		return { __type = "NumberSequence", keypoints = keypoints }
+	end
+
+	if t == "NumberSequenceKeypoint" then
+		return {
+			__type = "NumberSequenceKeypoint",
+			time = value.Time, value = value.Value, envelope = value.Envelope,
+		}
+	end
+
+	if t == "ColorSequenceKeypoint" then
+		return {
+			__type = "ColorSequenceKeypoint",
+			time = value.Time,
+			value = serializeValue(value.Value, depth + 1),
+		}
+	end
+
+	if t == "Content" or t == "BinaryString" then
+		local b64 = base64Encode(tostring(value))
+		return {
+			__type = t,
+			base64 = b64,
+			length = #tostring(value),
+			unavailable = b64 == nil,
+		}
+	end
+
+	if t == "ProtectedString" then
+		local raw = tostring(value)
+		return {
+			__type = "ProtectedString",
+			length = #raw,
+			base64 = base64Encode(raw),
+		}
+	end
+
+	if t == "SecurityCapabilities" then
+		return { __type = "SecurityCapabilities", value = tonumber(value) or tostring(value) }
+	end
+
+	if t == "SharedTable" then
+		return { __type = "SharedTable", value = tostring(value) }
+	end
+
+	if t == "buffer" then
+		return { __type = "buffer", value = tostring(value) }
+	end
+
+	-- table (rare for property values)
+	if t == "table" then
+		local out = { __type = "table" }
+		for k, v in pairs(value) do
+			out[tostring(k)] = serializeValue(v, depth + 1)
+		end
+		return out
+	end
+
+	return { __type = t, value = tostring(value) }
+end
+
+-- ---------------------------------------------------------------------------
+-- Roblox API reflection (property names per class)
+-- ---------------------------------------------------------------------------
+
+local ApiCache = { loaded = false, classes = {} }
+
+local function parseApiDump(raw)
+	local ok, data = pcall(HttpService.JSONDecode, HttpService, raw)
+	if not ok or type(data) ~= "table" then
+		return false
+	end
+
+	local classes = {}
+	for _, class in ipairs(data.Classes or {}) do
+		local props = {}
+		for _, member in ipairs(class.Members or {}) do
+			if member.MemberType == "Property" then
+				local tags = {}
+				if member.Tags then
+					for _, tag in ipairs(member.Tags) do
+						tags[tag] = true
+					end
+				end
+				props[#props + 1] = {
+					name = member.Name,
+					valueType = member.ValueType and member.ValueType.Name or "unknown",
+					category = member.Category or "Other",
+					tags = tags,
+					security = member.Security,
+				}
+			end
+		end
+		classes[class.Name] = {
+			name = class.Name,
+			superclass = class.Superclass,
+			properties = props,
+		}
+	end
+
+	ApiCache.classes = classes
+	ApiCache.loaded = true
+	return true
+end
+
+local function loadApiDump()
+	if ApiCache.loaded then
+		return true
+	end
+
+	local cachePath = "export/_cache/api_dump.json"
+	if isfile and isfile(cachePath) then
+		local ok, raw = pcall(readfile, cachePath)
+		if ok and raw and #raw > 0 and parseApiDump(raw) then
+			return true
+		end
+	end
+
+	local ver = "version-"
+	if type(version) == "function" then
+		local ok, v = pcall(version)
+		if ok and type(v) == "string" then
+			ver = v
+		end
+	end
+
+	local url = ("http://setup.roblox.com/%s-API-Dump.json"):format(ver)
+	local raw
+	if type(game.HttpGet) == "function" then
+		raw = game:HttpGet(url)
+	elseif type(game.HttpGetAsync) == "function" then
+		raw = game:HttpGetAsync(url)
+	else
+		warn("[Exporter] Cannot fetch API dump — using getproperties-only mode")
+		return false
+	end
+
+	if not parseApiDump(raw) then
+		return false
+	end
+
+	ensureFolder("export/_cache")
+	writefile(cachePath, raw)
+	return true
+end
+
+local function getClassPropertyDefs(className)
+	local defs = {}
+	local seen = {}
+	local current = className
+
+	while current and ApiCache.classes[current] do
+		local classData = ApiCache.classes[current]
+		for i = #classData.properties, 1, -1 do
+			local prop = classData.properties[i]
+			if not seen[prop.name] then
+				seen[prop.name] = true
+				defs[#defs + 1] = prop
+			end
+		end
+		current = classData.superclass
+	end
+
+	return defs
+end
+
+-- ---------------------------------------------------------------------------
+-- Property normalization
+-- ---------------------------------------------------------------------------
+
+local function canonicalPropertyName(name)
+	if name:match("^[A-Z]") then
+		return name
+	end
+	return name:sub(1, 1):upper() .. name:sub(2)
+end
+
+local function isValidSerializedColor3(ser)
+	return type(ser) == "table"
+		and ser.__type == "Color3"
+		and not ser._invalid
+		and ser.r >= 0 and ser.r <= 1
+		and ser.g >= 0 and ser.g <= 1
+		and ser.b >= 0 and ser.b <= 1
+end
+
+local function isBetterPropertyValue(newVal, oldVal)
+	if isValidSerializedColor3(newVal) and not isValidSerializedColor3(oldVal) then
+		return true
+	end
+	if type(newVal) == "table" and newVal.__type and (not oldVal or oldVal == newVal) then
+		return true
+	end
+	return false
+end
+
+local function dedupeProperties(props)
+	local byLower = {}
+	local result = {}
+
+	for name, value in pairs(props) do
+		local lower = name:lower()
+		local existing = byLower[lower]
+
+		if not existing then
+			byLower[lower] = name
+			result[name] = value
+		else
+			local keepNew = false
+			if name:match("^[A-Z]") and not existing:match("^[A-Z]") then
+				keepNew = true
+			elseif isBetterPropertyValue(value, result[existing]) then
+				keepNew = true
+			end
+
+			if keepNew then
+				result[existing] = nil
+				byLower[lower] = name
+				result[name] = value
+			end
+		end
+	end
+
+	local uid = result.UniqueId
+	if uid == "00000000-0000-0000-0000-000000000000"
+		or (type(uid) == "string" and uid:match("^0%-0%-0%-0%-0+$")) then
+		result.UniqueId = nil
+	end
+
+	return result
+end
+
+local function rereadColor3Property(obj, propName)
+	for _, tryName in ipairs({ canonicalPropertyName(propName), propName, "Color3", "Color" }) do
+		local ok, val = pcall(function()
+			return obj[tryName]
+		end)
+		if ok and typeof(val) == "Color3" then
+			local ser = serializeValue(val)
+			if isValidSerializedColor3(ser) then
+				return ser
+			end
+		end
+	end
+	return nil
+end
+
+-- Классы для exportMode = "logic" (структура + механика, без Part/Texture/Mesh)
+local LOGIC_CLASSES = {
+	ModuleScript = true,
+	LocalScript = true,
+	Script = true,
+	ProximityPrompt = true,
+	ClickDetector = true,
+	RemoteEvent = true,
+	RemoteFunction = true,
+	BindableEvent = true,
+	BindableFunction = true,
+	Folder = true,
+	Model = true,
+	Tool = true,
+	ScreenGui = true,
+	BillboardGui = true,
+	SurfaceGui = true,
+	Frame = true,
+	ScrollingFrame = true,
+	TextButton = true,
+	TextLabel = true,
+	ImageButton = true,
+	ImageLabel = true,
+	StringValue = true,
+	IntValue = true,
+	BoolValue = true,
+	NumberValue = true,
+	ObjectValue = true,
+	Vector3Value = true,
+	CFrameValue = true,
+	Color3Value = true,
+	RayValue = true,
+}
+
+local MINIMAL_PROPS = {
+	ProximityPrompt = {
+		ActionText = true, ObjectText = true, HoldDuration = true,
+		MaxActivationDistance = true, Enabled = true, RequiresLineOfSight = true,
+		KeyboardKeyCode = true, GamepadKeyCode = true, Style = true, ClickablePrompt = true,
+	},
+	RemoteEvent = { Name = true },
+	RemoteFunction = { Name = true },
+	BindableEvent = { Name = true },
+	BindableFunction = { Name = true },
+	ClickDetector = { MaxActivationDistance = true, Enabled = true, Name = true },
+	Folder = { Name = true },
+	Model = { Name = true, PrimaryPart = true, WorldPivot = true },
+	ModuleScript = { Name = true, Enabled = true },
+	LocalScript = { Name = true, Enabled = true, RunContext = true },
+	Script = { Name = true, Enabled = true, RunContext = true },
+	Tool = { Name = true, Enabled = true, RequiresHandle = true, CanBeDropped = true },
+	StringValue = { Name = true, Value = true },
+	IntValue = { Name = true, Value = true },
+	BoolValue = { Name = true, Value = true },
+	NumberValue = { Name = true, Value = true },
+	ObjectValue = { Name = true, Value = true },
+	Vector3Value = { Name = true, Value = true },
+}
+
+local function isLogicClass(className)
+	return LOGIC_CLASSES[className] == true
+end
+
+local function trimPropertiesForMode(obj, properties)
+	local mode = Exporter.Config.exportMode
+	if mode ~= "logic" and mode ~= "minimal" then
+		return properties
+	end
+
+	local allow = MINIMAL_PROPS[obj.ClassName]
+	if not allow then
+		return properties
+	end
+
+	local trimmed = {}
+	for key, value in pairs(properties) do
+		if allow[key] then
+			trimmed[key] = value
+		end
+	end
+	if properties.Name ~= nil then trimmed.Name = properties.Name end
+	if properties.ClassName ~= nil then trimmed.ClassName = properties.ClassName end
+	return trimmed
+end
+
+-- ---------------------------------------------------------------------------
+-- Tree path registry (fix sibling name collisions)
+-- ---------------------------------------------------------------------------
+
+function Exporter.isOrphanInstance(obj)
+	if obj == gameRoot then
+		return false
+	end
+	local roots = Exporter._exportRoots
+	if not roots then
+		local ok, under = pcall(function()
+			return obj:IsDescendantOf(gameRoot)
+		end)
+		return not (ok and under)
+	end
+	for _, root in ipairs(roots) do
+		if obj == root then
+			return false
+		end
+		local ok, under = pcall(function()
+			return obj:IsDescendantOf(root)
+		end)
+		if ok and under then
+			return false
+		end
+	end
+	return true
+end
+
+local function buildPathFromObject(obj)
+	local parts = {}
+	local current = obj
+	for _ = 1, 64 do
+		if not current then
+			break
+		end
+		table.insert(parts, 1, sanitizeSegment(current.Name))
+		if current == gameRoot then
+			break
+		end
+		current = current.Parent
+	end
+	if #parts == 0 then
+		return nil
+	end
+	return table.concat(parts, "/")
+end
+
+local function getRelativePath(obj, fullName, index, className)
+	if not Exporter.isOrphanInstance(obj) then
+		local chainPath = buildPathFromObject(obj)
+		if chainPath and #chainPath > 0 then
+			return chainPath
+		end
+		if fullName and fullName:find(".", 1, true) then
+			return fullNameToRelativePath(fullName)
+		end
+		return sanitizeSegment(obj.Name)
+	end
+	return pathJoin("_nil", ("%05d_%s_%s"):format(index, className, sanitizeSegment(obj.Name)))
+end
+
+local function resolveUniquePath(baseRelative, registry)
+	local count = registry[baseRelative] or 0
+	registry[baseRelative] = count + 1
+
+	if count == 0 then
+		return baseRelative
+	end
+	return baseRelative .. ("__%d"):format(count + 1)
+end
+
+local function readProperty(obj, propName, isHidden)
+	local value, err
+
+	if isHidden and type(gethiddenproperty) == "function" then
+		local ok, result = pcall(gethiddenproperty, obj, propName)
+		if ok then
+			return result, nil
+		end
+		err = tostring(result)
+	elseif isHidden then
+		return nil, "gethiddenproperty unavailable"
+	else
+		local ok, result = pcall(function()
+			return obj[propName]
+		end)
+		if ok then
+			return result, nil
+		end
+		err = tostring(result)
+	end
+
+	return nil, err
+end
+
+local function collectProperties(obj)
+	local properties = {}
+	local hiddenProperties = {}
+	local errors = {}
+	local collected = {}
+	local mode = (Exporter and Exporter.Config and Exporter.Config.propertiesMode) or "fast"
+
+	if type(getproperties) == "function" then
+		local ok, props = pcall(getproperties, obj)
+		if ok and type(props) == "table" then
+			for name, value in pairs(props) do
+				collected[name] = true
+				local success, ser = pcall(serializeValue, value)
+				if success then
+					if type(ser) == "table" and ser.__type == "Color3" and ser._invalid then
+						local fixed = rereadColor3Property(obj, name)
+						ser = fixed or ser
+					end
+					properties[name] = ser
+				else
+					errors[name] = ser
+				end
+			end
+		end
+	end
+
+	if mode == "full" and loadApiDump() then
+		for _, propDef in ipairs(getClassPropertyDefs(obj.ClassName)) do
+			local name = propDef.name
+			if not collected[name] and not collected[name:lower()] then
+				local isHidden = propDef.tags.Hidden or propDef.tags.NotScriptable
+				local value, readErr = readProperty(obj, name, isHidden)
+
+				if readErr and not isHidden then
+					value, readErr = readProperty(obj, name, true)
+					isHidden = value ~= nil
+				end
+
+				if value ~= nil or readErr == nil then
+					collected[name] = true
+					local success, ser = pcall(serializeValue, value)
+					local target = isHidden and hiddenProperties or properties
+					if success then
+						if type(ser) == "table" and ser.__type == "Color3" and ser._invalid then
+							ser = rereadColor3Property(obj, name) or ser
+						end
+						target[name] = ser
+					else
+						target[name] = { __error = tostring(ser) }
+					end
+				elseif readErr then
+					errors[name] = readErr
+				end
+			end
+		end
+	end
+
+	properties = dedupeProperties(properties)
+	hiddenProperties = dedupeProperties(hiddenProperties)
+	properties = trimPropertiesForMode(obj, properties)
+
+	local cfg = Exporter.Config
+	local attributes = nil
+	local tags = nil
+
+	local wantTags = cfg.includeTags
+		or (cfg.exportMode == "logic" and (obj:IsA("Model") or obj:IsA("Folder") or obj:IsA("ProximityPrompt")))
+
+	if cfg.includeAttributes then
+		attributes = {}
+		pcall(function()
+			for attrName, attrValue in pairs(obj:GetAttributes()) do
+				attributes[attrName] = {
+					value = serializeValue(attrValue),
+					valueType = typeof(attrValue),
+				}
+			end
+		end)
+		if not next(attributes) then
+			attributes = nil
+		end
+	end
+
+	if wantTags then
+		tags = {}
+		pcall(function()
+			local CollectionService = game:GetService("CollectionService")
+			for _, tag in ipairs(CollectionService:GetTags(obj)) do
+				tags[#tags + 1] = tag
+			end
+		end)
+		if #tags == 0 then
+			tags = nil
+		end
+	end
+
+	return properties, hiddenProperties, attributes, tags, errors
+end
+
+-- ---------------------------------------------------------------------------
+-- Script source sidecar
+-- ---------------------------------------------------------------------------
+
+local function exportScriptSource(obj, exportRoot, relativePath)
+	if not obj:IsA("LuaSourceContainer") then
+		return nil
+	end
+
+	local sidecar = {}
+
+	if type(decompile) == "function" then
+		local viable = false
+		if obj:IsA("ModuleScript") then
+			viable = true
+		elseif obj:IsA("LocalScript") then
+			viable = obj.RunContext == Enum.RunContext.Client or obj.RunContext == Enum.RunContext.Legacy
+		elseif obj:IsA("Script") then
+			viable = obj.RunContext == Enum.RunContext.Client
+		end
+
+		if viable then
+			local ok, source = pcall(decompile, obj)
+			if ok and type(source) == "string" then
+				local luaPath = pathJoin(exportRoot, "scripts", relativePath .. ".lua")
+				local wrote, writeErr = writeFileSafe(luaPath, source)
+				if wrote then
+					sidecar.decompiledPath = luaPath
+				else
+					sidecar.decompileError = tostring(writeErr)
+				end
+			else
+				sidecar.decompileError = tostring(source)
+			end
+		else
+			sidecar.decompileSkipped = "not client-viable"
+		end
+	end
+
+	if type(getscriptbytecode) == "function" and Exporter.Config.saveBytecode then
+		local ok, bytecode = pcall(getscriptbytecode, obj)
+		if ok and type(bytecode) == "string" then
+			local bcPath = pathJoin(exportRoot, "bytecode", relativePath .. ".txt")
+			local wrote, writeErr = writeFileSafe(bcPath, bytecode)
+			if wrote then
+				sidecar.bytecodePath = bcPath
+			else
+				sidecar.bytecodeError = tostring(writeErr)
+			end
+		end
+	end
+
+	return sidecar
+end
+
+-- ---------------------------------------------------------------------------
+-- Main export
+-- ---------------------------------------------------------------------------
+
+local SYSTEM_ROOTS = {
+	CoreGui = true,
+	CorePackages = true,
+	RobloxReplicatedStorage = true,
+	Chat = true,
+	LocalizationService = true,
+	TestService = true,
+	PluginGuiService = true,
+	AssetService = true,
+	HttpService = true,
+	TelemetryService = true,
+	Stats = true,
+}
+
+local ENGINE_CLASSES = {
+	Motor6D = true,
+	Weld = true,
+	Snap = true,
+	Glue = true,
+	ManualWeld = true,
+	WeldConstraint = true,
+	RigidConstraint = true,
+	BallSocketConstraint = true,
+	RodConstraint = true,
+	SpringConstraint = true,
+	HingeConstraint = true,
+	AlignOrientation = true,
+	AlignPosition = true,
+	LinearVelocity = true,
+	AngularVelocity = true,
+	VectorForce = true,
+	Torque = true,
+	LineForce = true,
+	TouchTransmitter = true,
+	Wire = true,
+	Hole = true,
+	NoCollisionConstraint = true,
+	PlaneConstraint = true,
+	PrismaticConstraint = true,
+	CylindricalConstraint = true,
+	UniversalConstraint = true,
+	AnimationController = true,
+	Animator = true,
+	HumanoidDescription = true,
+	BodyMover = true,
+	BodyForce = true,
+	BodyGyro = true,
+	BodyPosition = true,
+	BodyThrust = true,
+	BodyVelocity = true,
+	AccessoryWeld = true,
+	WrapLayer = true,
+	WrapTarget = true,
+}
+
+local function getTopServiceName(fullName)
+	return fullName:match("^([^.]+)") or fullName
+end
+
+local function isUnderSystemRoot(fullName)
+	local top = getTopServiceName(fullName)
+	return SYSTEM_ROOTS[top] == true
+end
+
+function Exporter.getExportRoots()
+	local cfg = Exporter.Config
+	if not cfg.gameOnly then
+		return { gameRoot }
+	end
+
+	local roots = {}
+	local seen = {}
+
+	local function addRoot(inst)
+		if inst and not seen[inst] then
+			seen[inst] = true
+			roots[#roots + 1] = inst
+		end
+	end
+
+	for _, name in ipairs(cfg.exportRoots or {}) do
+		addRoot(gameRoot:FindFirstChild(name))
+	end
+
+	if cfg.includeLocalPlayer then
+		local ok, plr = pcall(function()
+			return game:GetService("Players").LocalPlayer
+		end)
+		if ok and plr then
+			addRoot(plr:FindFirstChild("PlayerGui"))
+			addRoot(plr:FindFirstChild("PlayerScripts"))
+			addRoot(plr:FindFirstChild("Backpack"))
+			addRoot(plr:FindFirstChild("leaderstats"))
+			if plr.Character then
+				addRoot(plr.Character)
+			end
+		end
+	end
+
+	if #roots == 0 then
+		addRoot(gameRoot:FindFirstChild("Workspace"))
+	end
+
+	return roots
+end
+
+function Exporter.getExportRoot()
+	local placeId = game.PlaceId
+	local placeName = "Place"
+	pcall(function()
+		placeName = MarketplaceService:GetProductInfo(placeId).Name
+	end)
+	placeName = sanitizeSegment(placeName)
+	local stamp = os.date("%Y-%m-%d_%H-%M-%S")
+	if Exporter.Config.shortExportFolder then
+		return pathJoin(Exporter.Config.rootFolder, ("%d_%s"):format(placeId, stamp))
+	end
+	return pathJoin(Exporter.Config.rootFolder, ("%d_%s_%s"):format(placeId, placeName, stamp))
+end
+
+function Exporter.gatherInstances()
+	local list = {}
+	local seen = {}
+	local count = 0
+
+	local function add(inst)
+		if seen[inst] then
+			return
+		end
+		seen[inst] = true
+		if Exporter.shouldSkipInstance(inst) then
+			return
+		end
+		count += 1
+		list[count] = inst
+	end
+
+	Exporter._exportRoots = Exporter.getExportRoots()
+
+	for _, root in ipairs(Exporter._exportRoots) do
+		add(root)
+		for _, desc in ipairs(root:GetDescendants()) do
+			add(desc)
+		end
+	end
+
+	if Exporter.Config.includeNilInstances and type(getnilinstances) == "function" then
+		local ok, nilInsts = pcall(getnilinstances)
+		if ok and type(nilInsts) == "table" then
+			for _, inst in ipairs(nilInsts) do
+				add(inst)
+			end
+		end
+	end
+
+	return list
+end
+
+function Exporter.shouldSkipInstance(obj)
+	local cfg = Exporter.Config
+
+	if cfg.skipOrphanInstances and Exporter.isOrphanInstance(obj) then
+		return true
+	end
+
+	if cfg.skipDataModel and obj.ClassName == "DataModel" then
+		return true
+	end
+
+	if cfg.skipEngineClasses and ENGINE_CLASSES[obj.ClassName] then
+		return true
+	end
+
+	if cfg.exportMode == "logic" then
+		if obj.Parent == gameRoot then
+			return true
+		end
+		if not isLogicClass(obj.ClassName) then
+			return true
+		end
+	end
+
+	if not cfg.includeCorePackages then
+		local ok, inCore = pcall(function()
+			local CoreGui = game:GetService("CoreGui")
+			local CorePackages = game:GetService("CorePackages")
+			return obj:IsDescendantOf(CoreGui) or obj:IsDescendantOf(CorePackages)
+		end)
+		if ok and inCore then
+			return true
+		end
+	end
+
+	local fullName = ""
+	pcall(function()
+		fullName = obj:GetFullName()
+	end)
+
+	if not cfg.includeCorePackages and isUnderSystemRoot(fullName) then
+		return true
+	end
+
+	if fullName:find("^CoreGui") or fullName:find("^CorePackages") then
+		return true
+	end
+
+	if fullName:find("^CoreGui%.") or fullName:find("^Chat%.") then
+		return true
+	end
+
+	return false
+end
+
+function Exporter.exportInstance(obj, exportRoot, index, classIndex, pathRegistry)
+	local fullName = "?"
+	local className = "Unknown"
+	pcall(function()
+		fullName = obj:GetFullName()
+		className = obj.ClassName
+	end)
+
+	local baseRelative = getRelativePath(obj, fullName, index, className)
+	local relativePath = resolveUniquePath(baseRelative, pathRegistry)
+	local originalTreePath
+	relativePath, originalTreePath = capRelativePath(relativePath, exportRoot, index, className)
+	local treePath = pathJoin(exportRoot, "tree", relativePath .. ".json")
+	local treeFile = pathJoin("tree", relativePath .. ".json")
+	local classFolder = pathJoin(exportRoot, "by-class", sanitizeSegment(className))
+	local classFile = pathJoin(classFolder, ("%04d_%s.json"):format(index, sanitizeSegment(obj.Name)))
+
+	local properties, hiddenProperties, attributes, tags, propErrors = collectProperties(obj)
+
+	local parentRef = nil
+	pcall(function()
+		local par = obj.Parent
+		if par then
+			parentRef = {
+				className = par.ClassName,
+				name = par.Name,
+				fullName = par:GetFullName(),
+			}
+		end
+	end)
+
+	local children = nil
+	if Exporter.Config.includeChildren then
+		children = {}
+		pcall(function()
+			for _, child in ipairs(obj:GetChildren()) do
+				children[#children + 1] = {
+					name = child.Name,
+					className = child.ClassName,
+				}
+			end
+		end)
+	end
+
+	local record = {
+		_index = index,
+		className = className,
+		name = obj.Name,
+		fullName = fullName,
+		treeFile = treeFile,
+		parent = parentRef,
+		properties = properties,
+	}
+
+	if children then record.children = children end
+	if attributes then record.attributes = attributes end
+	if tags then record.tags = tags end
+	if hiddenProperties and next(hiddenProperties) then record.hiddenProperties = hiddenProperties end
+	if propErrors and next(propErrors) then record.propertyErrors = propErrors end
+
+	if originalTreePath then
+		record.originalTreePath = originalTreePath
+	end
+
+	if obj:IsA("LuaSourceContainer") and Exporter.Config.decompileScripts then
+		record.scriptSidecar = exportScriptSource(obj, exportRoot, relativePath)
+	end
+
+	local wrote, writeErr = writeJson(treePath, record)
+	if not wrote then
+		return nil, writeErr or "writeJson failed"
+	end
+	if Exporter.Config.exportByClass then
+		writeJson(classFile, record)
+	end
+
+	classIndex[className] = (classIndex[className] or 0) + 1
+	return record, classIndex
+end
+
+local function saveManifest(exportRoot, manifest, complete)
+	manifest.status = complete and "complete" or "in_progress"
+	manifest.exportedCount = manifest.totalInstances or 0
+	if not Exporter.Config.saveManifestList then
+		manifest.instances = nil
+	end
+	writeJson(pathJoin(exportRoot, "manifest.json"), manifest)
+end
+
+function Exporter.run(userConfig)
+	if type(userConfig) == "table" then
+		for k, v in pairs(userConfig) do
+			Exporter.Config[k] = v
+		end
+	end
+
+	if Exporter.Config.propertiesMode == "full" then
+		loadApiDump()
+	end
+
+	local exportRoot = Exporter.getExportRoot()
+	folderCache = {}
+	ensureFolder(exportRoot)
+	ensureFolder(pathJoin(exportRoot, "tree"))
+	if Exporter.Config.exportByClass then
+		ensureFolder(pathJoin(exportRoot, "by-class"))
+	end
+	if Exporter.Config.decompileScripts then
+		ensureFolder(pathJoin(exportRoot, "scripts"))
+	end
+	if Exporter.Config.saveBytecode then
+		ensureFolder(pathJoin(exportRoot, "bytecode"))
+	end
+
+	local indexPath = pathJoin(exportRoot, "index.tsv")
+	local indexBuffer = {}
+	local indexBatchSize = Exporter.Config.indexBatchSize or 5000
+
+	local function flushIndexBuffer()
+		if #indexBuffer == 0 then
+			return
+		end
+		if appendfile then
+			appendfile(indexPath, table.concat(indexBuffer))
+		end
+		table.clear(indexBuffer)
+	end
+
+	local function bufferIndexLine(line)
+		if not Exporter.Config.saveInstanceIndex then
+			return
+		end
+		indexBuffer[#indexBuffer + 1] = line
+		if #indexBuffer >= indexBatchSize then
+			flushIndexBuffer()
+		end
+	end
+
+	if Exporter.Config.saveInstanceIndex then
+		writefile(indexPath, "index\tclassName\tfullName\ttreeFile\n")
+	end
+
+	Exporter.setStatus("Collecting instances...")
+	local instances = Exporter.gatherInstances()
+	Exporter.setStatus(("Mode [%s]: %d objects. Exporting..."):format(
+		Exporter.Config.exportMode or "full",
+		#instances
+	))
+
+	local manifest = {
+		placeId = game.PlaceId,
+		exportedAt = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+		exportRoot = exportRoot,
+		status = "in_progress",
+		totalInstances = 0,
+		totalPlanned = #instances,
+		byClassName = {},
+	}
+
+	local classIndex = {}
+	local pathRegistry = {}
+	local exported = 0
+	local failed = 0
+	local lastFailReason = nil
+	local manifestEvery = Exporter.Config.manifestSaveEvery or 2000
+	local yieldEvery = Exporter.Config.yieldEvery or 0
+	local warnEveryFailed = Exporter.Config.warnEveryFailed or 100
+
+	saveManifest(exportRoot, manifest, false)
+
+	for i, obj in ipairs(instances) do
+		local ok, record, writeErr = pcall(Exporter.exportInstance, obj, exportRoot, i, classIndex, pathRegistry)
+		if ok and record then
+			exported += 1
+			manifest.byClassName[record.className] = (manifest.byClassName[record.className] or 0) + 1
+
+			if Exporter.Config.saveManifestList then
+				manifest.instances = manifest.instances or {}
+				manifest.instances[#manifest.instances + 1] = {
+					index = i,
+					className = record.className,
+					fullName = record.fullName,
+					treeFile = record.treeFile,
+				}
+			end
+
+			if Exporter.Config.saveInstanceIndex then
+				bufferIndexLine(string.format(
+					"%d\t%s\t%s\t%s\n",
+					i,
+					record.className,
+					record.fullName:gsub("\t", " "),
+					record.treeFile
+				))
+			end
+		else
+			failed += 1
+			lastFailReason = ok and writeErr or record
+			if failed == 1 or failed % warnEveryFailed == 0 then
+				warn(("[Exporter] Write failed (%d so far): %s"):format(failed, tostring(lastFailReason)))
+			end
+		end
+
+		if manifestEvery > 0 and i % manifestEvery == 0 then
+			manifest.totalInstances = exported
+			manifest.failedCount = failed
+			saveManifest(exportRoot, manifest, false)
+		end
+
+		if yieldEvery > 0 and i % yieldEvery == 0 then
+			Exporter.setStatus(("Exporting %d / %d..."):format(i, #instances))
+			task.wait()
+		elseif i % 1000 == 0 then
+			Exporter.setStatus(("Exporting %d / %d..."):format(i, #instances))
+		end
+	end
+
+	manifest.totalInstances = exported
+	manifest.failedCount = failed
+	flushIndexBuffer()
+	manifest.filters = {
+		exportMode = Exporter.Config.exportMode,
+		gameOnly = Exporter.Config.gameOnly,
+		exportRoots = Exporter.Config.exportRoots,
+		skipEngineClasses = Exporter.Config.skipEngineClasses,
+		skipOrphanInstances = Exporter.Config.skipOrphanInstances,
+		includeCorePackages = Exporter.Config.includeCorePackages,
+		propertiesMode = Exporter.Config.propertiesMode,
+		shortExportFolder = Exporter.Config.shortExportFolder,
+		maxPathLength = Exporter.Config.maxPathLength,
+	}
+	saveManifest(exportRoot, manifest, true)
+
+	if Exporter.Config.exportByClass then
+		for className, classCount in pairs(classIndex) do
+			writeJson(pathJoin(exportRoot, "by-class", sanitizeSegment(className), "_count.json"), {
+				className = className,
+				count = classCount,
+			})
+		end
+	end
+
+	if failed > 0 then
+		Exporter.setStatus(("Done: %d ok, %d failed -> %s"):format(exported, failed, exportRoot))
+	else
+		Exporter.setStatus(("Done: %d instances -> %s"):format(exported, exportRoot))
+	end
+	return exportRoot, manifest
+end
+
+-- =============================================================================
+-- НАСТРОЙКИ (меняй здесь)
+-- =============================================================================
+
+local CONFIG = {
+	rootFolder = "export",
+
+	-- "logic" = скрипты, remotes, ProximityPrompt, Model/Folder (структура)
+	-- "full"  = всё под exportRoots (медленно, 100k+ объектов)
+	exportMode = "logic",
+
+	gameOnly = true,
+	includeCorePackages = false,
+	skipEngineClasses = true,
+	skipOrphanInstances = true,
+	exportRoots = {
+		"Workspace",
+		"ReplicatedStorage",
+		"ReplicatedFirst",
+		"StarterGui",
+		"StarterPack",
+		"StarterPlayer",
+		"Lighting",
+		"ServerScriptService",
+		"ServerStorage",
+	},
+	includeLocalPlayer = true,
+
+	exportByClass = false,
+	propertiesMode = "fast",
+	decompileScripts = true,
+	saveBytecode = false,
+	includeChildren = false,
+	includeTags = false,
+	includeAttributes = true,
+	saveManifestList = false,
+	saveInstanceIndex = true,
+	indexBatchSize = 5000,
+	yieldEvery = 50,
+	manifestSaveEvery = 2000,
+	includeNilInstances = false,
+	shortExportFolder = true,
+	maxPathLength = 200,
+	warnEveryFailed = 100,
+	skipDataModel = true,
+
+	statusCallback = function(msg)
+		print("[Exporter]", msg)
+	end,
+}
+
+-- =============================================================================
+-- АВТОЗАПУСК — просто выполни этот скрипт в игре
+-- =============================================================================
+
+task.spawn(function()
+	local ok, exportRoot, manifest = pcall(Exporter.run, CONFIG)
+	if ok then
+		print("[Exporter] Готово:", exportRoot)
+		print("[Exporter] OK:", manifest and manifest.totalInstances or "?",
+			"Failed:", manifest and manifest.failedCount or 0)
+	else
+		warn("[Exporter] Ошибка:", exportRoot)
+	end
+end)
